@@ -54,7 +54,7 @@ pnpm build
    ```
 
 5. Email auth works with either a six-digit OTP template or a magic link. Add `http://localhost:3000/auth/confirm` and `https://bhetau.vercel.app/auth/confirm` to the Auth redirect allow-list and set the production Site URL to `https://bhetau.vercel.app`.
-6. Enable phone auth and configure an SMS provider before expecting Nepal phone codes to deliver. The UI returns the provider error and offers email as the available fallback.
+6. Enable phone auth and configure an SMS provider, then set `NEXT_PUBLIC_SUPABASE_PHONE_AUTH_ENABLED=true`. Until then, email is the active default and the phone tab honestly shows that setup is required.
 7. Configure provider credentials and redirect URLs for Google/Apple only when those disabled placeholders are intentionally activated.
 8. Create private Storage buckets for original profile uploads. Serve authorized, appropriately sized derivatives or short-lived signed URLs.
 

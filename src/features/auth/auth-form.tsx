@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { getSupabaseBrowserClient, hasSupabaseEnv } from "@/lib/supabase/client";
 
 type AuthMethod = "phone" | "email";
+const phoneAuthEnabled = !hasSupabaseEnv || process.env.NEXT_PUBLIC_SUPABASE_PHONE_AUTH_ENABLED === "true";
 
 function normalizeNepalPhone(value: string) {
   let digits = value.replace(/\D/g, "");
@@ -18,7 +19,7 @@ function normalizeNepalPhone(value: string) {
 
 export function AuthForm({ initialError = "" }: { initialError?: string }) {
   const router = useRouter();
-  const [method, setMethod] = useState<AuthMethod>("phone");
+  const [method, setMethod] = useState<AuthMethod>(phoneAuthEnabled ? "phone" : "email");
   const [value, setValue] = useState("");
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState("");
@@ -96,18 +97,18 @@ export function AuthForm({ initialError = "" }: { initialError?: string }) {
       <div className="flex flex-1 flex-col justify-center py-10">
         <p className="font-devanagari text-sm font-semibold text-crimson">सुरक्षित रूपमा सुरु गरौँ</p>
         <h1 className="mt-3 text-4xl font-semibold leading-tight tracking-[-.05em]">{otpSent ? "Check your messages." : "A real hello starts here."}</h1>
-        <p className="mt-3 leading-7 text-stone">{otpSent ? `We sent sign-in instructions to ${method === "phone" ? `+977 ${normalizeNepalPhone(value).local}` : value.trim()}.` : "Create your account or sign in with a Nepal phone number or email."}</p>
+        <p className="mt-3 leading-7 text-stone">{otpSent ? `We sent sign-in instructions to ${method === "phone" ? `+977 ${normalizeNepalPhone(value).local}` : value.trim()}.` : phoneAuthEnabled ? "Create your account or sign in with a Nepal phone number or email." : "Create your account or sign in securely with email."}</p>
 
         {!hasSupabaseEnv && <div className="mt-6 flex items-start gap-3 rounded-2xl border border-[#f0c56c]/50 bg-[#fff8e8] p-4 text-sm text-[#6c4b0b] dark:bg-[#2a2111] dark:text-[#f5d78f]"><CheckCircle2 className="mt-0.5 shrink-0" size={18}/><span><b>Demo mode is on.</b> Use a valid-looking contact and enter any six digits.</span></div>}
 
         {!otpSent ? <>
           <div className="mt-7 grid grid-cols-2 gap-2 rounded-2xl bg-foreground/5 p-1">
-            <button type="button" onClick={() => changeMethod("phone")} className={`flex min-h-11 items-center justify-center gap-2 rounded-xl text-sm font-semibold ${method === "phone" ? "bg-surface shadow-sm" : "text-stone"}`}><Phone size={17}/> Phone</button>
+            <button type="button" disabled={!phoneAuthEnabled} aria-label={phoneAuthEnabled ? "Sign in with phone" : "Phone sign-in requires SMS provider setup"} onClick={() => changeMethod("phone")} className={`flex min-h-11 items-center justify-center gap-2 rounded-xl text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-45 ${method === "phone" ? "bg-surface shadow-sm" : "text-stone"}`}><Phone size={17}/> Phone</button>
             <button type="button" onClick={() => changeMethod("email")} className={`flex min-h-11 items-center justify-center gap-2 rounded-xl text-sm font-semibold ${method === "email" ? "bg-surface shadow-sm" : "text-stone"}`}><Mail size={17}/> Email</button>
           </div>
           <label className="mt-5 text-sm font-semibold" htmlFor="auth-value">{method === "phone" ? "Nepal mobile number" : "Email address"}</label>
           <div className="mt-2 flex h-14 items-center rounded-2xl border bg-surface px-4 focus-within:ring-2 focus-within:ring-crimson/25">{method === "phone" && <span className="mr-3 border-r pr-3 text-sm font-medium">+977</span>}<input id="auth-value" aria-describedby="contact-help" autoComplete={method === "phone" ? "tel-national" : "email"} className="min-w-0 flex-1 bg-transparent outline-none" type={method === "phone" ? "tel" : "email"} inputMode={method === "phone" ? "numeric" : "email"} placeholder={method === "phone" ? "98XXXXXXXX" : "you@example.com"} value={value} onChange={(event) => setValue(event.target.value)}/></div>
-          <p id="contact-help" className="mt-2 text-xs leading-5 text-stone">{method === "phone" ? "SMS delivery requires an enabled Supabase phone provider." : "You may receive a six-digit code or a secure sign-in link."}</p>
+          <p id="contact-help" className="mt-2 text-xs leading-5 text-stone">{method === "phone" ? "SMS delivery uses the configured Supabase phone provider." : phoneAuthEnabled ? "You may receive a six-digit code or a secure sign-in link." : "Email is active now. Nepal phone login unlocks after the SMS provider is connected."}</p>
           <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-2xl border p-4 text-sm leading-6"><input type="checkbox" className="mt-1 size-4 accent-[#e83c5b]" checked={ageConfirmed} onChange={(event) => setAgeConfirmed(event.target.checked)}/><span><b>I am 18 or older.</b><br/><span className="text-stone">Your date of birth is verified during profile setup.</span></span></label>
           {error && <p role="alert" className="mt-3 text-sm font-medium text-crimson">{error}</p>}
           <Button onClick={continueFlow} disabled={busy} className="mt-6 w-full">{busy ? "Sending…" : "Continue securely"}</Button>

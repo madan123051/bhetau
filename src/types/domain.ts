@@ -47,3 +47,37 @@ export interface DemoConversation {
   timestamp: string;
   unread: number;
 }
+
+export interface ProfileSetupData {
+  name: string;
+  dob: string;
+  gender: string;
+  meet: string[];
+  intent: RelationshipIntent | "";
+  city: string;
+  from: string;
+  languages: string[];
+  interests: string[];
+  bio: string;
+  prompt: string;
+  answer: string;
+  photos: string[];
+}
+
+export interface CurrentUserProfile {
+  userId: string | null;
+  firstName: string;
+  age: number | null;
+  city: string;
+  verified: boolean;
+  completion: number;
+  contact: string;
+  settings: {
+    age: boolean;
+    city: boolean;
+    active: boolean;
+    receipts: boolean;
+    visibility: boolean;
+    incognito: boolean;
+  };
+}

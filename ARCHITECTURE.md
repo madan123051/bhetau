@@ -2,7 +2,11 @@
 
 ## Product boundary
 
-The UI is a Next.js App Router PWA. It can run entirely with fictional mock data, while domain utilities and route boundaries mirror the production Supabase design. `src/data` owns seed profiles, `src/features` owns product workflows, and `src/lib` owns matching, validation, i18n, rate limiting, and Supabase clients.
+The UI is a Next.js App Router PWA. It can run entirely with fictional mock data, while configured environments use Supabase SSR cookie sessions for authentication and current-user profile persistence. `src/data` owns seed profiles, `src/features` owns product workflows, and `src/lib` owns matching, validation, i18n, rate limiting, and Supabase clients.
+
+## Authentication and profile lifecycle
+
+Next.js `proxy.ts` refreshes Supabase cookies and Server Components validate claims before rendering account data. Product routes redirect anonymous users to `/auth` and incomplete users to `/setup`; authorization is repeated at each Route Handler/RPC boundary. An `auth.users` trigger creates minimal app metadata without trusting user-supplied roles. The `complete_profile` RPC derives the actor from `auth.uid()`, enforces 18+, and atomically writes the account date, profile, preferences, and interest links. `/you` reads only the current user through RLS, and privacy updates remain owner-scoped.
 
 ## Like → match transaction
 
@@ -22,7 +26,7 @@ This design is race-safe because the database—not client state—owns uniquene
 
 RLS is enabled on every application table. Important boundaries:
 
-- Application `users.id` references `auth.users.id`; clients cannot update the role field.
+- Application `users.id` references `auth.users.id`; clients cannot update role, moderation, verification, or account-status fields.
 - Profile discovery requires visible, unpaused, non-incognito, active accounts and a no-block relationship.
 - Profile/photo writes are owner-only. Originals are private and image bytes live outside PostgreSQL.
 - Likes and passes are visible only to the actor. Matches, conversations, and messages require participation.
@@ -30,7 +34,7 @@ RLS is enabled on every application table. Important boundaries:
 - Reporters see their own reports; moderation access comes from the server-controlled user role.
 - Admin UI never provides arbitrary private-message reading. A future abuse-review process must be explicit, scoped, audited, and time-limited.
 
-RLS is defense in depth, not a replacement for server validation. The Next.js API routes validate shape/length with Zod and pass the caller’s bearer token so Supabase still enforces RLS.
+RLS is defense in depth, not a replacement for server validation. Next.js API routes validate shape/length with Zod and use the caller’s cookie or bearer session so Supabase still enforces RLS. Helper functions live in a non-exposed `private` schema. The two deliberately exposed `security definer` RPCs revoke anonymous execution, check `auth.uid()`, expose no authorization fields, and grant execution only to signed-in users.
 
 ## Location and Vibe Match
 

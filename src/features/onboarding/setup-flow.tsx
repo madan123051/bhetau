@@ -7,26 +7,30 @@ import { ArrowLeft, ArrowRight, Camera, Check, MapPin, Plus, X } from "lucide-re
 import { Wordmark } from "@/components/brand/brand-mark";
 import { Button } from "@/components/ui/button";
 import { dateOfBirthSchema, sanitizeProfileText } from "@/lib/validation/schemas";
+import type { ProfileSetupData, RelationshipIntent } from "@/types/domain";
 
-const intents = ["Long-term relationship", "Something casual", "Meet & see", "New friends", "Still figuring it out"];
+const intents: RelationshipIntent[] = ["Long-term relationship", "Something casual", "Meet & see", "New friends", "Still figuring it out"];
 const genders = ["Woman", "Man", "Non-binary", "Prefer to self-describe"];
 const meet = ["Women", "Men", "Non-binary people", "Everyone"];
 const languageOptions = ["नेपाली", "English", "Maithili", "Newa", "Bhojpuri", "Tamang", "Tibetan", "Hindi"];
 const interestOptions = ["Photography", "Coffee", "Trekking", "Momo", "Books", "Live music", "Cycling", "Cooking", "Pottery", "Running", "Films", "Yoga"];
 
-export function SetupFlow() {
+const emptyProfile: ProfileSetupData = { name: "", dob: "", gender: "", meet: [], intent: "", city: "", from: "", languages: [], interests: [], bio: "", prompt: "You should message me if…", answer: "", photos: [] };
+
+export function SetupFlow({ initialData, demoMode = false }: { initialData?: ProfileSetupData; demoMode?: boolean }) {
   const router = useRouter();
   const reduced = useReducedMotion();
   const [step, setStep] = useState(0);
   const [error, setError] = useState("");
-  const [data, setData] = useState({ name: "", dob: "", gender: "", meet: [] as string[], intent: "", city: "", from: "", languages: [] as string[], interests: [] as string[], bio: "", prompt: "You should message me if…", answer: "", photos: [] as string[] });
+  const [saving, setSaving] = useState(false);
+  const [data, setData] = useState<ProfileSetupData>(initialData ?? emptyProfile);
 
   const steps = useMemo(() => [
     { label: "YOUR NAME", title: "What should we call you?", hint: "Your first name is shown on your profile.", content: <input autoFocus aria-label="First name" value={data.name} onChange={(e) => setData({ ...data, name: e.target.value })} placeholder="First name" className="mt-8 h-16 w-full rounded-2xl border bg-surface px-5 text-xl outline-none focus:ring-2 focus:ring-crimson/25"/> },
     { label: "18+ ONLY", title: "When were you born?", hint: "Your age is shown, never your full birthday.", content: <input aria-label="Date of birth" type="date" value={data.dob} onChange={(e) => setData({ ...data, dob: e.target.value })} className="mt-8 h-16 w-full rounded-2xl border bg-surface px-5 text-lg outline-none focus:ring-2 focus:ring-crimson/25"/> },
     { label: "ABOUT YOU", title: "How do you describe yourself?", hint: "Choose what feels right. You can change this later.", content: <OptionGrid options={genders} selected={data.gender ? [data.gender] : []} onSelect={(value) => setData({ ...data, gender: value })}/> },
     { label: "YOUR PREFERENCES", title: "Who would you like to meet?", hint: "Choose one or more. We never use caste as a matching signal.", content: <OptionGrid options={meet} selected={data.meet} onSelect={(value) => setData({ ...data, meet: toggle(data.meet, value) })}/> },
-    { label: "YOUR INTENTION", title: "What are you looking for?", hint: "This appears prominently, so everyone can be clear.", content: <OptionGrid options={intents} selected={data.intent ? [data.intent] : []} onSelect={(value) => setData({ ...data, intent: value })}/> },
+    { label: "YOUR INTENTION", title: "What are you looking for?", hint: "This appears prominently, so everyone can be clear.", content: <OptionGrid options={intents} selected={data.intent ? [data.intent] : []} onSelect={(value) => setData({ ...data, intent: value as RelationshipIntent })}/> },
     { label: "APPROXIMATE ONLY", title: "Where do you call home?", hint: "We show a city or area—never an exact distance.", content: <div className="mt-8 space-y-3"><label className="flex h-16 items-center gap-3 rounded-2xl border bg-surface px-5"><MapPin size={19} className="text-crimson"/><input aria-label="Currently in" value={data.city} onChange={(e) => setData({ ...data, city: e.target.value })} placeholder="Currently in · e.g. Around Patan" className="min-w-0 flex-1 bg-transparent outline-none"/></label><input aria-label="From" value={data.from} onChange={(e) => setData({ ...data, from: e.target.value })} placeholder="From · optional" className="h-16 w-full rounded-2xl border bg-surface px-5 outline-none"/></div> },
     { label: "HOW YOU SPEAK", title: "Which languages feel natural?", hint: "Select all the languages you’d enjoy connecting in.", content: <OptionGrid options={languageOptions} selected={data.languages} onSelect={(value) => setData({ ...data, languages: toggle(data.languages, value) })}/> },
     { label: "YOUR WORLD", title: "What lights you up?", hint: "Pick at least three. These shape shared-vibe reasons.", content: <OptionGrid options={interestOptions} selected={data.interests} onSelect={(value) => setData({ ...data, interests: toggle(data.interests, value) })}/> },
@@ -46,11 +50,38 @@ export function SetupFlow() {
     if (step === 8 && (data.bio.length < 20 || data.answer.length < 8)) return setError("Add a little more to your bio and prompt answer."), false;
     return true;
   };
-  const next = () => { if (!validate()) return; if (step === steps.length - 1) { localStorage.setItem("bhetau-profile", JSON.stringify(data)); router.push("/discover"); } else setStep(step + 1); };
+  const next = async () => {
+    if (!validate()) return;
+    if (step !== steps.length - 1) {
+      setStep(step + 1);
+      return;
+    }
+
+    setSaving(true);
+    const profile = {
+      name: data.name, dob: data.dob, gender: data.gender, meet: data.meet,
+      intent: data.intent, city: data.city, from: data.from, languages: data.languages,
+      interests: data.interests, bio: data.bio, prompt: data.prompt, answer: data.answer,
+    };
+    const response = await fetch("/api/profile", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(profile),
+    }).catch(() => null);
+    const result = response ? await response.json().catch(() => null) : null;
+    setSaving(false);
+    if (!response?.ok) {
+      setError(result?.error ?? "We couldn’t save your profile. Check your connection and try again.");
+      return;
+    }
+    if (demoMode) localStorage.setItem("bhetau-profile", JSON.stringify(data));
+    router.replace("/discover");
+    router.refresh();
+  };
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-[430px] flex-col bg-background px-5 pb-7 pt-[max(20px,env(safe-area-inset-top))]">
-      <div className="flex items-center justify-between"><button onClick={() => step ? setStep(step - 1) : router.back()} className="grid size-11 place-items-center rounded-full border" aria-label="Go back"><ArrowLeft size={19}/></button><Wordmark compact/><button onClick={() => router.push("/discover")} className="min-h-11 px-1 text-xs font-semibold text-stone">Demo skip</button></div>
+      <div className="flex items-center justify-between"><button type="button" onClick={() => step ? setStep(step - 1) : router.back()} className="grid size-11 place-items-center rounded-full border" aria-label="Go back"><ArrowLeft size={19}/></button><Wordmark compact/>{demoMode ? <button type="button" onClick={() => router.push("/discover")} className="min-h-11 px-1 text-xs font-semibold text-stone">Demo skip</button> : <span className="size-11"/>}</div>
       <div className="mt-6 flex items-center gap-3"><div className="h-1.5 flex-1 overflow-hidden rounded-full bg-foreground/10"><div className="h-full rounded-full bg-gradient-to-r from-[#ff5a72] to-[#d72c55] transition-all" style={{ width: `${((step + 1) / steps.length) * 100}%` }}/></div><span className="text-xs font-bold text-stone">{step + 1} of {steps.length}</span></div>
       <div className="flex flex-1 flex-col pt-12">
         <AnimatePresence mode="wait">
@@ -60,7 +91,7 @@ export function SetupFlow() {
         </AnimatePresence>
         {error && <p role="alert" className="mt-4 flex items-center gap-2 text-sm font-medium text-crimson"><X size={16}/>{error}</p>}
       </div>
-      <Button onClick={next} className="mt-6 w-full">{step === steps.length - 1 ? "Finish profile" : "Continue"}<ArrowRight size={18}/></Button>
+      <Button onClick={next} disabled={saving} className="mt-6 w-full">{saving ? "Saving securely…" : step === steps.length - 1 ? "Finish profile" : "Continue"}<ArrowRight size={18}/></Button>
     </main>
   );
 }

@@ -1,0 +1,1 @@
+export default function Loading() { return <main className="mx-auto min-h-dvh max-w-[430px] animate-pulse bg-background p-5 pt-10"><div className="h-9 w-28 rounded-xl bg-foreground/8"/><div className="mt-8 aspect-[4/5] rounded-[24px] bg-foreground/8"/><div className="mt-4 h-14 rounded-2xl bg-foreground/8"/><span className="sr-only">Loading Bhetau</span></main>; }

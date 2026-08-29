@@ -1,0 +1,102 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --ivory: #fff9f6;
+  --ink: #171417;
+  --stone: #81777c;
+  --crimson: #e83c5b;
+  --wine: #8f1837;
+  --success: #20a66a;
+  --surface: #ffffff;
+  --raised: #fffefd;
+  --line: rgba(23, 20, 23, 0.1);
+}
+
+.dark {
+  --ivory: #0d0c0e;
+  --ink: #faf7f8;
+  --stone: #aaa0a5;
+  --surface: #171518;
+  --raised: #201d21;
+  --line: rgba(255, 255, 255, 0.1);
+}
+
+@theme inline {
+  --color-background: var(--ivory);
+  --color-foreground: var(--ink);
+  --color-crimson: var(--crimson);
+  --color-wine: var(--wine);
+  --color-stone: var(--stone);
+  --color-success: var(--success);
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+  --color-line: var(--line);
+  --font-sans: var(--font-geist-sans);
+  --font-devanagari: var(--font-devanagari);
+}
+
+* {
+  border-color: var(--line);
+}
+
+html {
+  scroll-behavior: smooth;
+  background: var(--ivory);
+}
+
+body {
+  min-height: 100vh;
+  background: var(--ivory);
+  color: var(--ink);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  text-rendering: optimizeLegibility;
+}
+
+button,
+a,
+input,
+textarea,
+select {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--crimson) 35%, transparent);
+  outline-offset: 3px;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--crimson) 24%, transparent);
+}
+
+.text-balance {
+  text-wrap: balance;
+}
+
+.paper-noise {
+  background-image:
+    radial-gradient(circle at 12% 12%, rgba(232, 60, 91, 0.08), transparent 24rem),
+    radial-gradient(circle at 88% 36%, rgba(143, 24, 55, 0.07), transparent 22rem);
+}
+
+.soft-shadow {
+  box-shadow: 0 24px 80px rgba(69, 25, 39, 0.14), 0 4px 16px rgba(69, 25, 39, 0.08);
+}
+
+.hide-scrollbar::-webkit-scrollbar { display: none; }
+.hide-scrollbar { scrollbar-width: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

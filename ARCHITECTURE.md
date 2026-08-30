@@ -46,6 +46,16 @@ Vibe Match is deterministic and explainable: shared interests 30%, intent 25%, l
 
 Reports and verification requests form queues; `moderation_events` provides an append-style audit record for warnings, restrictions, suspensions, bans, restoration, and verification outcomes. Production access should use signed server roles/claims, step-up authentication, scoped permissions, and immutable audit delivery. Never trust a role supplied by the browser.
 
+## Maya AI boundary
+
+Maya is an assistant feature, never a dating identity. The global product-shell button opens a visually distinct AI-labeled bottom sheet. Chat messages expose contextual actions, but generated replies can only be copied into the local draft; the existing user-controlled send action remains the sole messaging path.
+
+`/api/maya` is the server trust boundary. It validates the request with Zod, validates the Supabase claim, checks adult and account state, enforces Maya preferences and quotas, and verifies conversation participation/active match state whenever a conversation UUID is provided. The payload schema accepts at most 10 recent messages and only public/relevant profile fields. Passwords, tokens, precise GPS, payment data, moderation records, and cross-match conversation history are not accepted.
+
+Provider logic is behind `AIProvider`. `MAYA_AI_PROVIDER=gateway` uses the Vercel AI SDK and AI Gateway with separate fast, smart, and safety model configuration; `demo` provides deterministic server responses for credential-free development. System policy, application context, and untrusted profile/message data are separated. All provider output is schema-validated before it reaches the client. Bhetau product help uses a dedicated knowledge base, and deterministic high-signal safety rules run before model routing.
+
+Maya analytics deliberately exclude prompts and message content. `maya_requests` records operational metadata and token usage, `maya_feedback` records user-owned ratings, and `maya_preferences` stores explicit controls. RLS isolates rows to their owner while the existing trusted moderator role can read aggregate source rows. Admin metrics are computed from metadata only.
+
 ## Upload pipeline
 
 Production uploads require: authentication; file count ≤ 6; magic-byte MIME validation; image-only allow list; 15 MB input cap; pixel/dimension and decompression-bomb checks; metadata stripping; safety moderation; 4:5 WebP/AVIF derivatives; private originals; short-lived signed derivatives; and cleanup on profile/account deletion.
@@ -54,6 +64,6 @@ Production uploads require: authentication; file count ≤ 6; magic-byte MIME va
 
 1. Apply the migration to staging and run automated RLS tests with two users, one blocked pair, and one moderator.
 2. Implement private Storage upload/derivative Edge Functions and abuse-safe signed URLs.
-3. Replace in-memory rate limits with a shared durable limiter and add risk-aware auth limits.
+3. Move Maya's per-minute burst limit to a distributed limiter; daily limits already use persisted request metadata.
 4. Add transactional notification workers, subscription webhooks, and deletion/export jobs.
 5. Add end-to-end tests for OTP redirects, RLS denial cases, blocked messaging, and race-simulated reciprocal likes.

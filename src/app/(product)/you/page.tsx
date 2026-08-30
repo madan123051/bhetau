@@ -15,7 +15,7 @@ function ageFromBirthDate(value: string | null) {
 
 const demoProfile: CurrentUserProfile = {
   userId: null,
-  firstName: "Maya",
+  firstName: "Samira",
   age: 25,
   city: "Around Patan",
   verified: true,

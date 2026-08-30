@@ -1,6 +1,6 @@
 import { findBhetauHelp } from "./knowledge";
 import { MAYA_DISCLOSURE } from "./policy";
-import type { AIProvider, MayaProviderResult } from "./provider";
+import { isGeminiEnabled, type AIProvider, type MayaProviderResult } from "./provider";
 import type { MayaMode, MayaRequest, MayaResponse } from "./schemas";
 import { detectSafetySignals } from "./safety";
 
@@ -14,6 +14,11 @@ export function classifyMayaRoute(mode: MayaMode): MayaModelRoute {
 }
 
 export function getModelForRoute(route: Exclude<MayaModelRoute, "knowledge">) {
+  if (isGeminiEnabled()) {
+    if (route === "smart") return process.env.GEMINI_SMART_MODEL ?? process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
+    if (route === "safety") return process.env.GEMINI_SAFETY_MODEL ?? process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
+    return process.env.GEMINI_FAST_MODEL ?? process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
+  }
   if (route === "smart") return process.env.MAYA_SMART_MODEL ?? "openai/gpt-5.4";
   if (route === "safety") return process.env.MAYA_SAFETY_MODEL ?? "openai/gpt-5.4-mini";
   return process.env.MAYA_FAST_MODEL ?? "openai/gpt-5.4-mini";

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { checkPrototypeRateLimit } from "@/lib/rate-limit";
 import { getUserScopedServerClient } from "@/lib/supabase/server";
-import { profileSettingsSchema, profileSetupSchema, sanitizeProfileText } from "@/lib/validation/schemas";
+import { profileSettingsSchema, profileSetupSchema, sanitizeProfileTextStrict } from "@/lib/validation/schemas";
 
 const privateResponse = { "Cache-Control": "private, no-store" };
 
@@ -25,18 +25,18 @@ export async function POST(request: Request) {
 
   const profile = parsed.data;
   const { data, error } = await supabase.rpc("complete_profile", {
-    p_first_name: sanitizeProfileText(profile.name),
+    p_first_name: sanitizeProfileTextStrict(profile.name),
     p_birth_date: profile.dob,
-    p_gender: sanitizeProfileText(profile.gender),
-    p_interested_in: [...new Set(profile.meet.map(sanitizeProfileText))],
+    p_gender: sanitizeProfileTextStrict(profile.gender),
+    p_interested_in: [...new Set(profile.meet.map(sanitizeProfileTextStrict))],
     p_relationship_intention: profile.intent,
-    p_current_area: sanitizeProfileText(profile.city),
-    p_from_place: sanitizeProfileText(profile.from),
-    p_languages: [...new Set(profile.languages.map(sanitizeProfileText))],
-    p_interest_labels: [...new Set(profile.interests.map(sanitizeProfileText))],
-    p_bio: sanitizeProfileText(profile.bio),
-    p_prompt: sanitizeProfileText(profile.prompt),
-    p_prompt_answer: sanitizeProfileText(profile.answer),
+    p_current_area: sanitizeProfileTextStrict(profile.city),
+    p_from_place: sanitizeProfileTextStrict(profile.from),
+    p_languages: [...new Set(profile.languages.map(sanitizeProfileTextStrict))],
+    p_interest_labels: [...new Set(profile.interests.map(sanitizeProfileTextStrict))],
+    p_bio: sanitizeProfileTextStrict(profile.bio),
+    p_prompt: sanitizeProfileTextStrict(profile.prompt),
+    p_prompt_answer: sanitizeProfileTextStrict(profile.answer),
   });
   if (error) return NextResponse.json({ error: error.message }, { status: 400, headers: privateResponse });
   return NextResponse.json({ saved: true, profileId: data }, { headers: privateResponse });

@@ -66,5 +66,9 @@ export const reportSchema = z.object({
 });
 
 export function sanitizeProfileText(value: string) {
+  return value.replace(/[<>]/g, "");
+}
+
+export function sanitizeProfileTextStrict(value: string) {
   return value.replace(/[<>]/g, "").replace(/\s+/g, " ").trim();
 }

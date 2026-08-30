@@ -62,6 +62,63 @@ export class VercelGatewayProvider implements AIProvider {
   translate(input: MayaProviderInput) { return this.generateStructured(input); }
 }
 
+export class GoogleGeminiProvider implements AIProvider {
+  readonly name = "google-gemini";
+
+  async generateStructured(input: MayaProviderInput) {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) throw new Error("GEMINI_API_KEY is not configured.");
+
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(input.model)}:generateContent?key=${encodeURIComponent(apiKey)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: MAYA_SYSTEM_POLICY }] },
+        contents: [{
+          role: "user",
+          parts: [{ text: buildMayaUserPayload(input.mode, input.applicationContext, {
+            input: input.request.input,
+            selectedMessage: input.request.selectedMessage,
+            recentMessages: input.request.recentMessages,
+            currentUserProfile: input.request.currentUserProfile,
+            matchProfile: input.request.matchProfile,
+          }) }],
+        }],
+        generationConfig: {
+          responseMimeType: "application/json",
+          temperature: 0.4,
+          maxOutputTokens: 700,
+        },
+      }),
+      signal: AbortSignal.timeout(Number(process.env.MAYA_TIMEOUT_MS ?? 12_000)),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Gemini request failed (${response.status}).`);
+    }
+
+    const payload = await response.json() as {
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+      usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
+    };
+    const text = payload.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("").trim();
+    if (!text) throw new Error("Gemini returned an empty response.");
+
+    const parsed = JSON.parse(text);
+    const result = mayaResponseSchema.parse({ ...parsed, mode: input.mode, disclosure: MAYA_DISCLOSURE });
+    return {
+      response: result,
+      provider: this.name,
+      model: input.model,
+      inputTokens: payload.usageMetadata?.promptTokenCount,
+      outputTokens: payload.usageMetadata?.candidatesTokenCount,
+    };
+  }
+
+  moderate(input: MayaProviderInput) { return this.generateStructured(input); }
+  translate(input: MayaProviderInput) { return this.generateStructured(input); }
+}
+
 export class DemoMayaProvider implements AIProvider {
   readonly name = "bhetau-demo";
 
@@ -122,6 +179,11 @@ function demoTranslation(input: string, target: MayaRequest["targetLanguage"]) {
 }
 
 export function getMayaProvider(): AIProvider {
+  if (isGeminiEnabled()) return new GoogleGeminiProvider();
   return process.env.MAYA_AI_PROVIDER === "gateway" ? new VercelGatewayProvider() : new DemoMayaProvider();
+}
+
+export function isGeminiEnabled() {
+  return process.env.MAYA_AI_PROVIDER === "gemini" || Boolean(process.env.GEMINI_API_KEY);
 }
 

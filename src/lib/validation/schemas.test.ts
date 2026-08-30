@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dateOfBirthSchema, profileSettingsSchema, profileSetupSchema, sanitizeProfileText } from "./schemas";
+import { dateOfBirthSchema, profileSettingsSchema, profileSetupSchema, sanitizeProfileText, sanitizeProfileTextStrict } from "./schemas";
 
 describe("critical profile validation", () => {
   it("rejects anyone under 18", () => {
@@ -10,7 +10,12 @@ describe("critical profile validation", () => {
   it("accepts an adult and removes markup from profile copy", () => {
     const adult = new Date(); adult.setFullYear(adult.getFullYear() - 21);
     expect(dateOfBirthSchema.safeParse(adult).success).toBe(true);
-    expect(sanitizeProfileText("  hello <script> world  ")).toBe("hello script world");
+    expect(sanitizeProfileTextStrict("  hello <script> world  ")).toBe("hello script world");
+  });
+
+  it("preserves spaces while profile copy is being typed", () => {
+    expect(sanitizeProfileText("How are you ")).toBe("How are you ");
+    expect(sanitizeProfileText("hello <there>")).toBe("hello there");
   });
 
   it("validates a complete persisted profile payload", () => {

@@ -27,6 +27,22 @@ export function AuthForm({ initialError = "" }: { initialError?: string }) {
   const [error, setError] = useState(initialError);
   const [busy, setBusy] = useState(false);
 
+  const signInWithGoogle = async () => {
+    setError("");
+    if (!ageConfirmed) return setError("Confirm that you are 18 or older.");
+    if (!hasSupabaseEnv) return setError("Google sign-in is available after Supabase is configured.");
+
+    setBusy(true);
+    const result = await getSupabaseBrowserClient()!.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: `${window.location.origin}/auth/confirm?next=/setup` },
+    });
+    if (result.error) {
+      setBusy(false);
+      setError(result.error.message);
+    }
+  };
+
   const changeMethod = (nextMethod: AuthMethod) => {
     setMethod(nextMethod);
     setValue("");
@@ -113,7 +129,7 @@ export function AuthForm({ initialError = "" }: { initialError?: string }) {
           {error && <p role="alert" className="mt-3 text-sm font-medium text-crimson">{error}</p>}
           <Button onClick={continueFlow} disabled={busy} className="mt-6 w-full">{busy ? "Sending…" : "Continue securely"}</Button>
           <div className="my-6 flex items-center gap-3 text-xs text-stone"><span className="h-px flex-1 bg-line"/>optional providers<span className="h-px flex-1 bg-line"/></div>
-          <div className="grid grid-cols-2 gap-3"><Button variant="secondary" size="sm" disabled aria-label="Google sign-in is not configured">G&nbsp; Google</Button><Button variant="secondary" size="sm" disabled aria-label="Apple sign-in is not configured"><Apple size={17}/> Apple</Button></div>
+          <div className="grid grid-cols-2 gap-3"><Button variant="secondary" size="sm" disabled={busy || !hasSupabaseEnv} onClick={signInWithGoogle} aria-label={hasSupabaseEnv ? "Continue with Google" : "Google sign-in requires Supabase setup"}><span aria-hidden className="font-semibold">G</span> Google</Button><Button variant="secondary" size="sm" disabled aria-label="Apple sign-in is not configured"><Apple size={17}/> Apple</Button></div>
         </> : <>
           <label className="mt-7 text-sm font-semibold" htmlFor="otp">One-time code</label>
           <input id="otp" aria-describedby="otp-help" autoComplete="one-time-code" inputMode="numeric" maxLength={6} value={otp} onChange={(event) => setOtp(event.target.value.replace(/\D/g, ""))} className="mt-2 h-16 rounded-2xl border bg-surface px-4 text-center font-mono text-3xl tracking-[.35em] outline-none focus:ring-2 focus:ring-crimson/25" placeholder="000000"/>

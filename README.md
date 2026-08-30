@@ -57,7 +57,7 @@ pnpm build
 
 5. Email auth works with either a six-digit OTP template or a magic link. Add `http://localhost:3000/auth/confirm` and `https://bhetau.vercel.app/auth/confirm` to the Auth redirect allow-list and set the production Site URL to `https://bhetau.vercel.app`.
 6. Enable phone auth and configure an SMS provider, then set `NEXT_PUBLIC_SUPABASE_PHONE_AUTH_ENABLED=true`. Until then, email is the active default and the phone tab honestly shows that setup is required.
-7. Configure provider credentials and redirect URLs for Google/Apple only when those disabled placeholders are intentionally activated.
+7. To enable Google sign-in, enable Google under Supabase Auth → Providers, add the Google OAuth client ID/secret there, and add `https://YOUR_SUPABASE_PROJECT.supabase.co/auth/v1/callback` to the OAuth client's authorized redirect URIs. Keep `https://bhetau.vercel.app/auth/confirm` in Supabase's redirect allow-list. The Google button activates automatically once the public Supabase URL/key are configured.
 8. Create private Storage buckets for original profile uploads. Serve authorized, appropriately sized derivatives or short-lived signed URLs.
 
 The initial migration lives at `supabase/migrations/20260829111120_bhetau_initial_auth_profile.sql`; `20260829111329_bhetau_security_hardening.sql` moves RLS helpers into a private schema and applies policy/index improvements. `20260830070341_maya_assistant.sql` adds metadata-only Maya requests, feedback, preferences, indexes, grants, and owner/admin RLS. Together they create the requested constraints, policies, auth-user trigger, atomic `complete_profile(...)`, and `create_like(target_user_id)`.
@@ -70,7 +70,7 @@ The app calls Supabase only when both public environment values are present. The
 
 Maya is always labeled as an AI assistant and never appears in discovery, matching, or user-to-user conversations as a person. Every Maya request goes through authenticated `/api/maya` server routes, strict Zod input/output schemas, adult/account checks, per-minute and configurable daily limits, conversation-participant checks when a conversation UUID is supplied, and a provider abstraction in `src/lib/maya`.
 
-The default `MAYA_AI_PROVIDER=demo` uses deterministic server-side help, safety, translation samples, and coaching output so local development remains functional without credentials. Set `MAYA_AI_PROVIDER=gateway` in a trusted server environment to use Vercel AI Gateway. Vercel deployments can authenticate through OIDC; non-Vercel environments can provide the server-only `AI_GATEWAY_API_KEY`. Model routing is controlled by:
+The default `MAYA_AI_PROVIDER=demo` uses deterministic server-side help, safety, translation samples, and coaching output so local development remains functional without credentials. Add the server-only `GEMINI_API_KEY` in Vercel to activate direct Google Gemini automatically; `GEMINI_MODEL=gemini-2.5-flash` is the default, with optional fast/smart/safety overrides. Set `MAYA_AI_PROVIDER=gateway` only when you prefer Vercel AI Gateway. Vercel deployments can authenticate through OIDC; non-Vercel environments can provide the server-only `AI_GATEWAY_API_KEY`. Gateway model routing is controlled by:
 
 ```env
 MAYA_FAST_MODEL=openai/gpt-5.4-mini
@@ -78,7 +78,7 @@ MAYA_SMART_MODEL=openai/gpt-5.4
 MAYA_SAFETY_MODEL=openai/gpt-5.4-mini
 ```
 
-Do not prefix these or `AI_GATEWAY_API_KEY` with `NEXT_PUBLIC_`. Profile text and message content are treated as untrusted user data, kept separate from system policy, and never written to Maya analytics. At most 10 recent messages are accepted. `maya_requests` stores only user/match IDs, mode, provider/model, latency, token counts, status, and time; `maya_feedback` and `maya_preferences` are owner-scoped through RLS.
+Do not prefix these, `GEMINI_API_KEY`, or `AI_GATEWAY_API_KEY` with `NEXT_PUBLIC_`. Profile text and message content are treated as untrusted user data, kept separate from system policy, and never written to Maya analytics. At most 10 recent messages are accepted. `maya_requests` stores only user/match IDs, mode, provider/model, latency, token counts, status, and time; `maya_feedback` and `maya_preferences` are owner-scoped through RLS.
 
 The Bhetau help mode is answered from a dedicated local knowledge base rather than generated product behavior. High-signal safety patterns such as money requests, crypto pitches, threats, sexual pressure, suspicious links, and underage signals receive cautious local warnings before model routing. Provider failures return a retryable Maya error without interrupting normal chat.
 

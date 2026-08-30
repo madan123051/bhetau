@@ -16,7 +16,7 @@ const overlap = (a: string[], b: string[]) => {
 };
 
 export function calculateVibeScore(viewer: Viewer, profile: Profile): VibeScore {
-  if (profile.age < viewer.ageRange[0] || profile.age > viewer.ageRange[1]) {
+  if (profile.age !== null && (profile.age < viewer.ageRange[0] || profile.age > viewer.ageRange[1])) {
     return { score: 0, reasons: [], filtered: true };
   }
 

@@ -10,7 +10,7 @@ export type PortraitQuadrant = "tl" | "tr" | "bl" | "br";
 export interface Profile {
   id: string;
   firstName: string;
-  age: number;
+  age: number | null;
   verified: boolean;
   city: string;
   from: string;
@@ -22,7 +22,7 @@ export interface Profile {
   prompt: string;
   answer: string;
   bio: string;
-  portrait: PortraitQuadrant;
+  portrait?: PortraitQuadrant;
   promptAffinity: number;
 }
 

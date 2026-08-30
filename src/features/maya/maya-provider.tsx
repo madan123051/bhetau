@@ -1,6 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { usePathname } from "next/navigation";
 import { AlertTriangle, ArrowLeft, Check, ChevronRight, Languages, MessageCircleReply, RefreshCw, ShieldCheck, Sparkles, ThumbsDown, ThumbsUp, UserRoundPen, X } from "lucide-react";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,7 @@ const actions: Array<{ mode: MayaMode; action: string; label: string; detail: st
 ];
 
 export function MayaProvider({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [seed, setSeed] = useState<MayaOpenContext>({});
   const [enabled, setEnabled] = useState(true);
@@ -36,7 +38,8 @@ export function MayaProvider({ children }: { children: React.ReactNode }) {
   const openMaya = useCallback((context: MayaOpenContext = {}) => { setSeed(context); setOpen(true); }, []);
   const closeMaya = useCallback(() => setOpen(false), []);
   const value = useMemo(() => ({ openMaya, closeMaya }), [closeMaya, openMaya]);
-  return <MayaContext.Provider value={value}>{children}{enabled && <button type="button" onClick={() => openMaya()} className="absolute bottom-[170px] right-4 z-40 grid size-14 place-items-center rounded-[20px] border border-crimson/20 bg-gradient-to-br from-[#fff7f5] to-[#ffe5e9] text-wine shadow-[0_14px_36px_rgba(143,24,55,.22)] dark:from-[#31171f] dark:to-[#211318] dark:text-[#ff9aac]" aria-label="Open Maya AI assistant"><Sparkles size={22}/><span className="absolute -right-1 -top-1 rounded-full bg-ink px-1.5 py-0.5 text-[8px] font-bold text-ivory">AI</span></button>}<AnimatePresence>{open && <MayaSheet initialContext={seed} onClose={closeMaya}/>}</AnimatePresence></MayaContext.Provider>;
+  const isChatDetail = /^\/chats\/[^/]+$/.test(pathname);
+  return <MayaContext.Provider value={value}>{children}{enabled && <motion.button type="button" onClick={() => openMaya()} initial={false} whileTap={{ scale: 0.94 }} className={`absolute right-4 z-50 grid size-14 place-items-center rounded-full border border-crimson/20 bg-gradient-to-br from-[#fff7f5] to-[#ffe5e9] text-wine shadow-[0_14px_36px_rgba(143,24,55,.26)] dark:from-[#31171f] dark:to-[#211318] dark:text-[#ff9aac] ${isChatDetail ? "bottom-[190px]" : "bottom-[104px]"}`} aria-label="Open Maya AI assistant"><Sparkles size={22}/><span className="absolute -right-1 -top-1 rounded-full bg-ink px-1.5 py-0.5 text-[8px] font-bold text-ivory">AI</span></motion.button>}<AnimatePresence>{open && <MayaSheet initialContext={seed} onClose={closeMaya}/>}</AnimatePresence></MayaContext.Provider>;
 }
 
 export function useMaya() {

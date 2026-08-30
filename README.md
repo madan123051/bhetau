@@ -2,7 +2,7 @@
 
 **Meet someone worth meeting.** A premium, mobile-first Nepal-focused dating and connection PWA built around intent, personality, safety, and privacy.
 
-The repository includes a polished local demo plus a working Supabase SSR login/profile path, PostgreSQL schema and RLS policies, trusted profile and like-to-match RPCs, PWA shell, tests, and development-only moderation dashboard.
+The repository includes a polished local demo plus a working Supabase SSR login/profile path, PostgreSQL schema and RLS policies, trusted profile and like-to-match RPCs, the clearly disclosed Maya AI assistant, PWA shell, tests, and development-only moderation dashboard.
 
 ## What works in demo mode
 
@@ -17,6 +17,8 @@ The repository includes a polished local demo plus a working Supabase SSR login/
 - Hide, block, report, unmatch, privacy settings, Safety Center, and Share Date prototype
 - Development-only moderation dashboard with metadata-only abuse review
 - Dark mode, offline banner/fallback, loading/error states, English/Nepali dictionary structure
+- Maya Profile Coach, Conversation Coach, Match Insight, translation, safety checks, and Bhetau knowledge help
+- Contextual “Ask Maya” chat actions with editable suggestions that never auto-send
 
 All names and portraits in the demo are fictional. The portrait atlas was generated for this project; no real person’s photo is used.
 
@@ -58,11 +60,27 @@ pnpm build
 7. Configure provider credentials and redirect URLs for Google/Apple only when those disabled placeholders are intentionally activated.
 8. Create private Storage buckets for original profile uploads. Serve authorized, appropriately sized derivatives or short-lived signed URLs.
 
-The initial migration lives at `supabase/migrations/20260829111120_bhetau_initial_auth_profile.sql`; `20260829111329_bhetau_security_hardening.sql` moves RLS helpers into a private schema and applies policy/index improvements. Together they create every requested table, constraints, indexes, policies, an auth-user trigger, atomic `complete_profile(...)`, and `create_like(target_user_id)`.
+The initial migration lives at `supabase/migrations/20260829111120_bhetau_initial_auth_profile.sql`; `20260829111329_bhetau_security_hardening.sql` moves RLS helpers into a private schema and applies policy/index improvements. `20260830070341_maya_assistant.sql` adds metadata-only Maya requests, feedback, preferences, indexes, grants, and owner/admin RLS. Together they create the requested constraints, policies, auth-user trigger, atomic `complete_profile(...)`, and `create_like(target_user_id)`.
 
 When configured, auth uses Supabase SSR cookies refreshed by Next.js `proxy.ts`. Product routes require a validated session and completed adult profile. `/setup` persists account, profile, preferences, and interests in one transaction; `/you` loads the signed-in profile, persists privacy toggles, and signs out the real session. The service worker never caches authenticated navigations or API responses.
 
 The app calls Supabase only when both public environment values are present. The browser never receives a service-role secret.
+
+## Maya AI assistant
+
+Maya is always labeled as an AI assistant and never appears in discovery, matching, or user-to-user conversations as a person. Every Maya request goes through authenticated `/api/maya` server routes, strict Zod input/output schemas, adult/account checks, per-minute and configurable daily limits, conversation-participant checks when a conversation UUID is supplied, and a provider abstraction in `src/lib/maya`.
+
+The default `MAYA_AI_PROVIDER=demo` uses deterministic server-side help, safety, translation samples, and coaching output so local development remains functional without credentials. Set `MAYA_AI_PROVIDER=gateway` in a trusted server environment to use Vercel AI Gateway. Vercel deployments can authenticate through OIDC; non-Vercel environments can provide the server-only `AI_GATEWAY_API_KEY`. Model routing is controlled by:
+
+```env
+MAYA_FAST_MODEL=openai/gpt-5.4-mini
+MAYA_SMART_MODEL=openai/gpt-5.4
+MAYA_SAFETY_MODEL=openai/gpt-5.4-mini
+```
+
+Do not prefix these or `AI_GATEWAY_API_KEY` with `NEXT_PUBLIC_`. Profile text and message content are treated as untrusted user data, kept separate from system policy, and never written to Maya analytics. At most 10 recent messages are accepted. `maya_requests` stores only user/match IDs, mode, provider/model, latency, token counts, status, and time; `maya_feedback` and `maya_preferences` are owner-scoped through RLS.
+
+The Bhetau help mode is answered from a dedicated local knowledge base rather than generated product behavior. High-signal safety patterns such as money requests, crypto pitches, threats, sexual pressure, suspicious links, and underage signals receive cautious local warnings before model routing. Provider failures return a retryable Maya error without interrupting normal chat.
 
 ## Trusted server actions still required for production
 

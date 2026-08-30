@@ -2,7 +2,7 @@ import type { DemoConversation, Profile } from "@/types/domain";
 
 export const currentUser = {
   id: "demo-user",
-  firstName: "Maya",
+  firstName: "Samira",
   age: 25,
   city: "Around Patan",
   intent: "Long-term relationship" as const,

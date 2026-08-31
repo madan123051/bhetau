@@ -38,6 +38,11 @@ export interface DemoMessage {
   text: string;
   timestamp: string;
   status?: "sending" | "sent" | "read";
+  replyTo?: { id: string; text: string; sender: "me" | "them" };
+  edited?: boolean;
+  deleted?: boolean;
+  expiresAt?: string | null;
+  reactions?: Array<{ emoji: string; mine: boolean }>;
 }
 
 export interface DemoConversation {
@@ -46,6 +51,7 @@ export interface DemoConversation {
   lastMessage: string;
   timestamp: string;
   unread: number;
+  profile?: Profile;
 }
 
 export interface ProfileSetupData {

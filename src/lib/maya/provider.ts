@@ -27,6 +27,126 @@ export interface AIProvider {
   translate(input: MayaProviderInput): Promise<MayaProviderResult>;
 }
 
+export type MayaProviderFailureReason =
+  | "configuration"
+  | "authentication"
+  | "rate_limited"
+  | "timeout"
+  | "network"
+  | "upstream"
+  | "blocked"
+  | "empty_response"
+  | "invalid_response";
+
+export class MayaProviderError extends Error {
+  readonly name = "MayaProviderError";
+
+  constructor(
+    public readonly reason: MayaProviderFailureReason,
+    public readonly retryable: boolean,
+    public readonly upstreamStatus?: number,
+  ) {
+    super("Maya provider request failed.");
+  }
+}
+
+const geminiResponseJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    title: { type: "string", description: "A short, human-readable heading." },
+    summary: { type: "string", description: "A concise, practical answer." },
+    suggestions: {
+      type: "array",
+      maxItems: 3,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          text: { type: "string" },
+          tone: { type: "string", enum: ["friendly", "playful", "confident", "casual", "direct", "respectful"] },
+        },
+        required: ["text"],
+      },
+    },
+    translation: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        original: { type: "string" },
+        translated: { type: "string" },
+        targetLanguage: { type: "string", enum: ["en", "ne", "roman-ne", "hi"] },
+      },
+      required: ["original", "translated", "targetLanguage"],
+    },
+    safety: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        riskLevel: { type: "string", enum: ["none", "low", "medium", "high"] },
+        categories: {
+          type: "array",
+          maxItems: 6,
+          items: { type: "string", enum: ["financial_request", "investment_or_crypto", "harassment", "sexual_pressure", "threat", "impersonation", "suspicious_link", "personal_information", "off_platform_pressure", "underage_signal"] },
+        },
+        explanation: { type: "string" },
+        recommendedActions: {
+          type: "array",
+          maxItems: 5,
+          items: { type: "string", enum: ["be_cautious", "avoid_payment", "protect_personal_info", "stay_on_bhetau", "draft_safe_reply", "block", "report", "contact_emergency_services"] },
+        },
+      },
+      required: ["riskLevel", "categories", "explanation", "recommendedActions"],
+    },
+  },
+  required: ["title", "summary", "suggestions", "safety"],
+} as const;
+
+type GeminiPayload = {
+  candidates?: Array<{
+    finishReason?: string;
+    content?: { parts?: Array<{ text?: string }> };
+  }>;
+  promptFeedback?: { blockReason?: string };
+  usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
+};
+
+export function parseGeminiStructuredResponse(text: string, mode: MayaMode): MayaResponse {
+  const normalized = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(normalized);
+  } catch {
+    throw new MayaProviderError("invalid_response", true);
+  }
+  const result = mayaResponseSchema.safeParse({
+    ...(typeof parsed === "object" && parsed !== null ? parsed : {}),
+    mode,
+    disclosure: MAYA_DISCLOSURE,
+  });
+  if (!result.success) throw new MayaProviderError("invalid_response", true);
+  return result.data;
+}
+
+export function classifyGeminiHttpFailure(status: number) {
+  if (status === 401 || status === 403) return new MayaProviderError("authentication", false, status);
+  if (status === 429) return new MayaProviderError("rate_limited", true, status);
+  return new MayaProviderError("upstream", status >= 500, status);
+}
+
+function configuredTimeoutMs() {
+  const configured = Number(process.env.MAYA_TIMEOUT_MS ?? 12_000);
+  return Number.isFinite(configured) ? Math.min(30_000, Math.max(2_000, configured)) : 12_000;
+}
+
+function asGeminiProviderError(error: unknown) {
+  if (error instanceof MayaProviderError) return error;
+  if (error instanceof DOMException && (error.name === "AbortError" || error.name === "TimeoutError")) {
+    return new MayaProviderError("timeout", true);
+  }
+  return new MayaProviderError("network", true);
+}
+
 export class VercelGatewayProvider implements AIProvider {
   readonly name = "vercel-ai-gateway";
 
@@ -67,45 +187,59 @@ export class GoogleGeminiProvider implements AIProvider {
 
   async generateStructured(input: MayaProviderInput) {
     const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) throw new Error("GEMINI_API_KEY is not configured.");
+    if (!apiKey) throw new MayaProviderError("configuration", false);
 
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(input.model)}:generateContent?key=${encodeURIComponent(apiKey)}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: MAYA_SYSTEM_POLICY }] },
-        contents: [{
-          role: "user",
-          parts: [{ text: buildMayaUserPayload(input.mode, input.applicationContext, {
-            input: input.request.input,
-            selectedMessage: input.request.selectedMessage,
-            recentMessages: input.request.recentMessages,
-            currentUserProfile: input.request.currentUserProfile,
-            matchProfile: input.request.matchProfile,
-          }) }],
-        }],
-        generationConfig: {
-          responseMimeType: "application/json",
-          temperature: 0.4,
-          maxOutputTokens: 700,
-        },
-      }),
-      signal: AbortSignal.timeout(Number(process.env.MAYA_TIMEOUT_MS ?? 12_000)),
-    });
+    const signal = AbortSignal.timeout(configuredTimeoutMs());
+    let response: Response | null = null;
+    let failure: MayaProviderError | null = null;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(input.model)}:generateContent`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: MAYA_SYSTEM_POLICY }] },
+            contents: [{
+              role: "user",
+              parts: [{ text: buildMayaUserPayload(input.mode, input.applicationContext, {
+                input: input.request.input,
+                selectedMessage: input.request.selectedMessage,
+                recentMessages: input.request.recentMessages,
+                currentUserProfile: input.request.currentUserProfile,
+                matchProfile: input.request.matchProfile,
+              }) }],
+            }],
+            generationConfig: {
+              responseMimeType: "application/json",
+              responseJsonSchema: geminiResponseJsonSchema,
+              temperature: 0.35,
+              maxOutputTokens: 1_200,
+              ...(/^gemini-2\.5-flash(?:$|-)/.test(input.model) ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
+            },
+          }),
+          signal,
+        });
+        if (response.ok) break;
+        failure = classifyGeminiHttpFailure(response.status);
+      } catch (error) {
+        failure = asGeminiProviderError(error);
+      }
 
-    if (!response.ok) {
-      throw new Error(`Gemini request failed (${response.status}).`);
+      if (!failure.retryable || attempt === 1 || signal.aborted) throw failure;
+      await new Promise((resolve) => setTimeout(resolve, 250));
     }
 
-    const payload = await response.json() as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-      usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
-    };
-    const text = payload.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("").trim();
-    if (!text) throw new Error("Gemini returned an empty response.");
+    if (!response?.ok) throw failure ?? new MayaProviderError("upstream", true);
 
-    const parsed = JSON.parse(text);
-    const result = mayaResponseSchema.parse({ ...parsed, mode: input.mode, disclosure: MAYA_DISCLOSURE });
+    const payload = await response.json().catch(() => null) as GeminiPayload | null;
+    if (!payload) throw new MayaProviderError("invalid_response", true);
+    const text = payload.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("").trim();
+    if (!text) {
+      const blocked = Boolean(payload.promptFeedback?.blockReason) || ["SAFETY", "BLOCKLIST", "PROHIBITED_CONTENT"].includes(payload.candidates?.[0]?.finishReason ?? "");
+      throw new MayaProviderError(blocked ? "blocked" : "empty_response", !blocked);
+    }
+
+    const result = parseGeminiStructuredResponse(text, input.mode);
     return {
       response: result,
       provider: this.name,

@@ -3,5 +3,7 @@ export const supabasePublishableKey =
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-export const hasSupabaseEnv = Boolean(supabaseUrl && supabasePublishableKey);
+const forceDemoMode = process.env.NEXT_PUBLIC_BHETAU_DEMO_MODE === "true";
+
+export const hasSupabaseEnv = !forceDemoMode && Boolean(supabaseUrl && supabasePublishableKey);
 

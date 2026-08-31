@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
-import type { AIProvider, MayaProviderInput, MayaProviderResult } from "./provider";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { classifyGeminiHttpFailure, GoogleGeminiProvider, parseGeminiStructuredResponse, type AIProvider, type MayaProviderInput, type MayaProviderResult } from "./provider";
 import { findBhetauHelp } from "./knowledge";
 import { buildMayaUserPayload, MAYA_SYSTEM_POLICY } from "./policy";
 import { classifyMayaRoute, routeMayaRequest } from "./router";
@@ -25,6 +25,11 @@ class FakeProvider implements AIProvider {
 
 const baseRequest: MayaRequest = { mode: "conversation_coach", action: "help_reply", input: "That sounds fun", preferredLanguage: "en", recentMessages: [] };
 const adultActor: MayaActor = { id: "user-1", isAdult: true, accountActive: true, mayaEnabled: true, contextAllowed: true };
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
+});
 
 describe("Maya schemas and privacy boundaries", () => {
   it("accepts a concise profile coach request", () => {
@@ -62,6 +67,9 @@ describe("Maya routing", () => {
     await routeMayaRequest(baseRequest, provider);
     expect(classifyMayaRoute("conversation_coach")).toBe("smart");
     expect(provider.generateStructured).toHaveBeenCalledOnce();
+    expect(provider.generateStructured).toHaveBeenCalledWith(expect.objectContaining({
+      applicationContext: expect.objectContaining({ action: "help_reply" }),
+    }));
   });
 
   it("routes profile coaching to the fast path", async () => {
@@ -135,6 +143,62 @@ describe("Maya authorization, rate limits, and failures", () => {
     const provider = new FakeProvider();
     provider.generateStructured.mockRejectedValueOnce(new DOMException("Timed out", "TimeoutError"));
     await expect(processMayaRequest(baseRequest, adultActor, provider)).rejects.toMatchObject({ code: "provider_failed" });
+  });
+
+  it("validates Gemini JSON and enforces Bhetau-owned response fields", () => {
+    const response = parseGeminiStructuredResponse(JSON.stringify({
+      mode: "profile_coach",
+      title: "A thoughtful reply",
+      summary: "Keep it short and ask one honest question.",
+      suggestions: [{ text: "What made that place memorable for you?", tone: "friendly" }],
+      safety: { riskLevel: "none", categories: [], explanation: "", recommendedActions: [] },
+      disclosure: "I am a human match.",
+    }), "conversation_coach");
+    expect(response.mode).toBe("conversation_coach");
+    expect(response.disclosure).toBe("Maya is an AI assistant. Review suggestions before using them.");
+  });
+
+  it("accepts a fenced Gemini JSON response but rejects malformed output", () => {
+    const body = "```json\n" + JSON.stringify({
+      title: "Translation",
+      summary: "Meaning preserved.",
+      suggestions: [],
+      safety: { riskLevel: "none", categories: [], explanation: "", recommendedActions: [] },
+    }) + "\n```";
+    expect(parseGeminiStructuredResponse(body, "translation").title).toBe("Translation");
+    expect(() => parseGeminiStructuredResponse("not-json", "translation")).toThrowError("Maya provider request failed.");
+  });
+
+  it("marks only transient Gemini HTTP failures as retryable", () => {
+    expect(classifyGeminiHttpFailure(429)).toMatchObject({ reason: "rate_limited", retryable: true, upstreamStatus: 429 });
+    expect(classifyGeminiHttpFailure(503)).toMatchObject({ reason: "upstream", retryable: true, upstreamStatus: 503 });
+    expect(classifyGeminiHttpFailure(403)).toMatchObject({ reason: "authentication", retryable: false, upstreamStatus: 403 });
+    expect(classifyGeminiHttpFailure(400)).toMatchObject({ reason: "upstream", retryable: false, upstreamStatus: 400 });
+  });
+
+  it("keeps the Gemini key out of the URL and requests schema-constrained JSON", async () => {
+    vi.stubEnv("GEMINI_API_KEY", "server-only-test-key");
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      candidates: [{ content: { parts: [{ text: JSON.stringify(safeResponse("conversation_coach")) }] }, finishReason: "STOP" }],
+      usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 20 },
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const provider = new GoogleGeminiProvider();
+    await provider.generateStructured({
+      mode: "conversation_coach",
+      model: "gemini-2.5-flash",
+      request: baseRequest,
+      applicationContext: { action: "help_reply" },
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).not.toContain("server-only-test-key");
+    expect(new Headers(init.headers).get("x-goog-api-key")).toBe("server-only-test-key");
+    const requestBody = JSON.parse(String(init.body)) as { generationConfig?: { responseMimeType?: string; responseJsonSchema?: unknown; thinkingConfig?: { thinkingBudget?: number } } };
+    expect(requestBody.generationConfig?.responseMimeType).toBe("application/json");
+    expect(requestBody.generationConfig?.responseJsonSchema).toBeTruthy();
+    expect(requestBody.generationConfig?.thinkingConfig?.thinkingBudget).toBe(0);
   });
 });
 

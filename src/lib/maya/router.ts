@@ -57,7 +57,17 @@ export async function routeMayaRequest(request: MayaRequest, provider: AIProvide
   }
 
   const route = classifyMayaRoute(request.mode);
-  const input = { mode: request.mode, model: getModelForRoute(route as Exclude<MayaModelRoute, "knowledge">), request, applicationContext: { tone: request.tone, preferredLanguage: request.preferredLanguage, targetLanguage: request.targetLanguage } };
+  const input = {
+    mode: request.mode,
+    model: getModelForRoute(route as Exclude<MayaModelRoute, "knowledge">),
+    request,
+    applicationContext: {
+      action: request.action,
+      tone: request.tone,
+      preferredLanguage: request.preferredLanguage,
+      targetLanguage: request.targetLanguage,
+    },
+  };
   if (route === "safety") return provider.moderate(input);
   if (request.mode === "translation") return provider.translate(input);
   return provider.generateStructured(input);

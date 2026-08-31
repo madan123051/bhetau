@@ -55,7 +55,20 @@ export const profileSettingsSchema = z.object({
 export const messageSchema = z.object({
   conversationId: z.string().uuid().or(z.string().min(2).max(80)),
   text: z.string().trim().min(1).max(2000),
+  replyToId: z.string().uuid().or(z.string().min(1).max(80)).nullable().optional(),
 });
+
+export const messageMutationSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("edit"), messageId: z.string().uuid().or(z.string().min(1).max(80)), text: z.string().trim().min(1).max(2000) }),
+  z.object({ action: z.literal("unsend"), messageId: z.string().uuid().or(z.string().min(1).max(80)) }),
+  z.object({ action: z.literal("react"), messageId: z.string().uuid().or(z.string().min(1).max(80)), emoji: z.enum(["❤️", "😂", "👍", "😮", "😢", "🔥"]).nullable() }),
+]);
+
+export const conversationSettingsSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("archive"), conversationId: z.string().uuid().or(z.string().min(1).max(80)) }),
+  z.object({ action: z.literal("read"), conversationId: z.string().uuid().or(z.string().min(1).max(80)), messageId: z.string().uuid().or(z.string().min(1).max(80)) }),
+  z.object({ action: z.literal("timer"), conversationId: z.string().uuid().or(z.string().min(1).max(80)), hours: z.union([z.literal(6), z.literal(12), z.null()]) }),
+]);
 
 export const likeSchema = z.object({ targetUserId: z.string().uuid() });
 

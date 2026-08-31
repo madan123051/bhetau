@@ -1,12 +1,130 @@
-import Link from "next/link";
-import { ArrowUpRight, MessageCircle } from "lucide-react";
-import { Portrait } from "@/components/profile/portrait";
-import { conversations, getProfile, profiles } from "@/data/profiles";
+import { conversations as demoConversations, getProfile } from "@/data/profiles";
+import { ChatsList, type ChatListItem } from "@/features/chat/chats-list";
+import { hasSupabaseEnv } from "@/lib/supabase/config";
+import { getSupabaseServerClient } from "@/lib/supabase/server";
 
-export default function ChatsPage() {
-  return <main className="pb-6 pt-[max(26px,env(safe-area-inset-top))]"><div className="px-5"><p className="text-xs font-bold tracking-[.14em] text-crimson">CONVERSATIONS</p><h1 className="mt-2 text-4xl font-semibold tracking-[-.05em]">Chats</h1><p className="mt-2 text-sm text-stone">The good part starts after the match.</p></div>
-    <section className="mt-7"><div className="flex items-center justify-between px-5"><h2 className="text-sm font-semibold">Recent matches</h2><span className="text-xs text-stone">Say hello</span></div><div className="hide-scrollbar mt-3 flex gap-4 overflow-x-auto px-5 pb-2">{profiles.slice(0,5).map((profile) => <Link key={profile.id} href={`/chats/${profile.id}`} className="w-16 shrink-0 text-center"><div className="relative"><Portrait quadrant={profile.portrait} alt={`Fictional portrait of ${profile.firstName}`} className="mx-auto size-15 rounded-full"/><span className="absolute bottom-0 right-0 size-4 rounded-full border-[3px] border-background bg-success"/></div><span className="mt-2 block truncate text-xs font-medium">{profile.firstName}</span></Link>)}</div></section>
-    <section className="mt-7 px-3"><h2 className="px-2 text-sm font-semibold">Messages</h2><div className="mt-2 divide-y">{conversations.map((conversation) => { const profile = getProfile(conversation.profileId)!; return <Link key={conversation.id} href={`/chats/${conversation.id}`} className="flex min-h-[86px] items-center gap-3 rounded-2xl px-2 transition hover:bg-foreground/4"><Portrait quadrant={profile.portrait} alt={`Fictional portrait of ${profile.firstName}`} className="size-14 shrink-0 rounded-full"/><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><p className="font-semibold">{profile.firstName}{profile.verified && <span className="ml-1 text-success">✓</span>}</p><span className="text-[11px] text-stone">{conversation.timestamp}</span></div><p className={`mt-1 truncate text-sm ${conversation.unread ? "font-medium text-foreground" : "text-stone"}`}>{conversation.lastMessage}</p></div>{conversation.unread ? <span className="grid size-6 place-items-center rounded-full bg-crimson text-[11px] font-bold text-white">{conversation.unread}</span> : <ArrowUpRight size={16} className="text-stone"/>}</Link>; })}</div></section>
-    {conversations.length === 0 && <div className="mx-5 mt-12 rounded-[28px] border p-8 text-center"><MessageCircle className="mx-auto text-crimson"/><h2 className="mt-4 text-xl font-semibold">Your next conversation hasn’t started yet.</h2><p className="mt-2 text-sm text-stone">A good prompt can make the first hello easier.</p></div>}
-  </main>;
+const KATHMANDU_TIME_ZONE = "Asia/Kathmandu";
+
+function dateKey(date: Date) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: KATHMANDU_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+function formatChatTime(iso: string, now = new Date()) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+
+  if (dateKey(date) === dateKey(now)) {
+    return new Intl.DateTimeFormat("en", {
+      timeZone: KATHMANDU_TIME_ZONE,
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(date);
+  }
+
+  const yesterday = new Date(now.getTime() - 86_400_000);
+  if (dateKey(date) === dateKey(yesterday)) return "Yesterday";
+  if (now.getTime() - date.getTime() < 6 * 86_400_000) {
+    return new Intl.DateTimeFormat("en", {
+      timeZone: KATHMANDU_TIME_ZONE,
+      weekday: "short",
+    }).format(date);
+  }
+
+  return new Intl.DateTimeFormat("en", {
+    timeZone: KATHMANDU_TIME_ZONE,
+    month: "short",
+    day: "numeric",
+  }).format(date);
+}
+
+function demoItems(): ChatListItem[] {
+  return demoConversations.flatMap((conversation) => {
+    const profile = getProfile(conversation.profileId);
+    if (!profile) return [];
+    return [{
+      id: conversation.id,
+      profileId: profile.id,
+      firstName: profile.firstName,
+      city: profile.city,
+      verified: profile.verified,
+      portrait: profile.portrait,
+      lastMessage: conversation.lastMessage,
+      timestamp: conversation.timestamp,
+      timestampIso: null,
+      unread: conversation.unread,
+      matchedAt: new Date(0).toISOString(),
+      hasMessages: true,
+    }];
+  });
+}
+
+type ChatSummaryRow = {
+  conversation_id: string;
+  other_user_id: string;
+  first_name: string;
+  current_area: string;
+  verified: boolean;
+  matched_at: string;
+  last_message_body: string | null;
+  last_message_type: "text" | "image" | "system" | null;
+  last_message_sender_id: string | null;
+  last_message_created_at: string | null;
+  last_message_deleted_at: string | null;
+  unread_count: number;
+};
+
+async function loadChats(): Promise<{ items: ChatListItem[]; error?: string }> {
+  const supabase = await getSupabaseServerClient();
+  if (!supabase) return { items: [] };
+
+  const { data: auth } = await supabase.auth.getClaims();
+  const userId = typeof auth?.claims?.sub === "string" ? auth.claims.sub : null;
+  if (!userId) return { items: [], error: "Sign in again to load your conversations." };
+
+  const { data, error } = await supabase.rpc("get_my_chat_summaries", { p_limit: 100 });
+  if (error) {
+    return { items: [], error: "We couldn’t load your conversations. Please retry." };
+  }
+
+  const summaries = (data ?? []) as ChatSummaryRow[];
+  const now = new Date();
+  const items = summaries.map((summary): ChatListItem => {
+    const activityAt = summary.last_message_created_at ?? summary.matched_at;
+    const messagePreview = summary.last_message_deleted_at
+      ? "Message unsent"
+      : summary.last_message_type === "image"
+        ? `${summary.last_message_sender_id === userId ? "You sent" : "Sent"} a photo`
+        : summary.last_message_body?.trim() || "You matched — say hello.";
+
+    return {
+      id: summary.conversation_id,
+      profileId: summary.other_user_id,
+      firstName: summary.first_name || "Your match",
+      city: summary.current_area || "Bhetau",
+      verified: summary.verified,
+      lastMessage: summary.last_message_created_at && summary.last_message_sender_id === userId && summary.last_message_type === "text" && !summary.last_message_deleted_at
+        ? `You: ${messagePreview}`
+        : messagePreview,
+      timestamp: formatChatTime(activityAt, now),
+      timestampIso: activityAt,
+      unread: Number(summary.unread_count) || 0,
+      matchedAt: summary.matched_at,
+      hasMessages: Boolean(summary.last_message_created_at),
+    };
+  });
+  return { items };
+}
+
+export default async function ChatsPage() {
+  if (!hasSupabaseEnv) {
+    return <ChatsList initialItems={demoItems()} demoMode />;
+  }
+
+  const { items, error } = await loadChats();
+  return <ChatsList initialItems={items} loadError={error} />;
 }

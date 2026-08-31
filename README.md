@@ -12,7 +12,8 @@ The repository includes a polished local demo plus a working Supabase SSR login/
 - Nine-step, one-question-at-a-time profile setup with an 18+ gate
 - Drag, keyboard, and button-based discovery actions
 - Deterministic, explainable Vibe Match score
-- Mutual match moment, Likes preview, conversation list, and optimistic chat
+- Mutual match moment, Likes preview, persisted match conversation list, and optimistic chat
+- Swipe-to-archive chats, replies, emoji reactions, sender-only edit/unsend, and optional 6/12-hour disappearing messages
 - Editable icebreakers that never impersonate the user
 - Hide, block, report, unmatch, privacy settings, Safety Center, and Share Date prototype
 - Development-only moderation dashboard with metadata-only abuse review
@@ -52,6 +53,7 @@ pnpm build
 
    ```bash
    supabase link --project-ref YOUR_PROJECT_REF
+   supabase db push --dry-run
    supabase db push
    ```
 
@@ -60,11 +62,19 @@ pnpm build
 7. To enable Google sign-in, enable Google under Supabase Auth → Providers, add the Google OAuth client ID/secret there, and add `https://YOUR_SUPABASE_PROJECT.supabase.co/auth/v1/callback` to the OAuth client's authorized redirect URIs. Keep `https://bhetau.vercel.app/auth/confirm` in Supabase's redirect allow-list. The Google button activates automatically once the public Supabase URL/key are configured.
 8. Create private Storage buckets for original profile uploads. Serve authorized, appropriately sized derivatives or short-lived signed URLs.
 
-The initial migration lives at `supabase/migrations/20260829111120_bhetau_initial_auth_profile.sql`; `20260829111329_bhetau_security_hardening.sql` moves RLS helpers into a private schema and applies policy/index improvements. `20260830070341_maya_assistant.sql` adds metadata-only Maya requests, feedback, preferences, indexes, grants, and owner/admin RLS. Together they create the requested constraints, policies, auth-user trigger, atomic `complete_profile(...)`, and `create_like(target_user_id)`.
+The initial migration lives at `supabase/migrations/20260829111120_bhetau_initial_auth_profile.sql`; `20260829111329_bhetau_security_hardening.sql` moves RLS helpers into a private schema and applies policy/index improvements. `20260830070341_maya_assistant.sql` adds metadata-only Maya requests, feedback, preferences, indexes, grants, and owner/admin RLS. `20260830121707_message_lifecycle.sql` adds participant-scoped reactions, replies, archive/timer updates, sender-only message mutation grants, matched-profile visibility, message expiry enforcement, and conversation activity triggers. Together they create the requested constraints, policies, auth-user trigger, atomic `complete_profile(...)`, and `create_like(target_user_id)`.
+
+Pushing the Next.js deployment does **not** apply PostgreSQL migrations. Before using real chat in staging or production, authenticate and link the Supabase CLI (or use an authenticated Supabase migration workflow), preview with `supabase db push --dry-run`, and then run `supabase db push`. Do not use `--include-seed` against production.
 
 When configured, auth uses Supabase SSR cookies refreshed by Next.js `proxy.ts`. Product routes require a validated session and completed adult profile. `/setup` persists account, profile, preferences, and interests in one transaction; `/you` loads the signed-in profile, persists privacy toggles, and signs out the real session. The service worker never caches authenticated navigations or API responses.
 
 The app calls Supabase only when both public environment values are present. The browser never receives a service-role secret.
+
+## Real chat behavior
+
+With Supabase configured and the migrations applied, a reciprocal like creates exactly one match and conversation. `/chats` loads the signed-in participant's active conversations, including brand-new matches with no messages, persisted previews, timestamps, and unread counts. Swiping/removing a row writes `archived_at` only for that participant; it does not delete either person's history. A new message clears the archive state so the conversation returns.
+
+Messages support a same-conversation reply reference, one allowed emoji reaction per participant, sender-only edit, and sender-only unsend. Unsend retains a tombstone instead of exposing the original text. The conversation timer can be Off, 6 hours, or 12 hours. A timer is stamped onto messages sent after that setting is selected; changing it does not retroactively rewrite older messages. Expired rows become unreadable through RLS at their deadline and are purged in bounded batches when later messages are inserted. Add a scheduled database cleanup job in production if expiry cleanup must run even when a conversation has no new traffic.
 
 ## Maya AI assistant
 

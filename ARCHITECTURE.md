@@ -22,6 +22,22 @@ The browser submits a target UUID to a trusted route, which validates with Zod a
 
 This design is race-safe because the database—not client state—owns uniqueness and the transaction. The mock service follows the same invariant and has an integration test.
 
+## Chat persistence and message lifecycle
+
+The same `create_like` transaction that creates a mutual match also creates its unique conversation and two participant rows. The configured `/chats` route reads those participant-scoped records from Supabase, so a match appears even before either person sends a message; previews, timestamps, and unread counts come from persisted messages rather than mock profiles.
+
+Chat removal is a per-user archive, not destructive deletion. A swipe or accessible Remove control updates only that participant's `conversation_participants.archived_at`. The conversation and the other participant's view remain intact, and the after-insert message trigger clears archive state when the conversation becomes active again.
+
+Message lifecycle mutations cross authenticated Route Handlers with Zod validation, prototype rate limits, a caller-scoped Supabase client, column-level grants, and RLS:
+
+- Replies store `reply_to_id`; the insert trigger rejects missing, expired, deleted, or cross-conversation reply targets.
+- Each participant can set or remove one allow-listed emoji reaction per message. Participants can read reactions, while each user can mutate only their own reaction.
+- Only the sender can edit or unsend an undeleted message. Edits retain `edited_at`; unsend replaces the body with a tombstone and records `deleted_at`.
+- A participant can set the conversation timer to Off, 6 hours, or 12 hours. The insert trigger snapshots the current timer into each new message's `expires_at`, so later timer changes are intentionally non-retroactive.
+- Message SELECT policy hides expired rows at the deadline. A bounded after-insert cleanup deletes expired rows independently of client behavior; a scheduled database cleanup should supplement it in production so quiet conversations are physically purged too.
+
+These schema and policy changes live in `supabase/migrations/20260830121707_message_lifecycle.sql`. Application deployment alone does not execute them: every configured staging and production project must run an authenticated migration deploy (`supabase db push --dry-run`, followed by `supabase db push`) before enabling real chat.
+
 ## RLS and privacy
 
 RLS is enabled on every application table. Important boundaries:
@@ -29,7 +45,7 @@ RLS is enabled on every application table. Important boundaries:
 - Application `users.id` references `auth.users.id`; clients cannot update role, moderation, verification, or account-status fields.
 - Profile discovery requires visible, unpaused, non-incognito, active accounts and a no-block relationship.
 - Profile/photo writes are owner-only. Originals are private and image bytes live outside PostgreSQL.
-- Likes and passes are visible only to the actor. Matches, conversations, and messages require participation.
+- Likes and passes are visible only to the actor. Matches, conversations, messages, replies, and reactions require participation; reaction mutation is owner-scoped and message edit/unsend is sender-scoped.
 - A block is checked symmetrically by discovery, match creation, and message insertion.
 - Reporters see their own reports; moderation access comes from the server-controlled user role.
 - Admin UI never provides arbitrary private-message reading. A future abuse-review process must be explicit, scoped, audited, and time-limited.
@@ -62,8 +78,8 @@ Production uploads require: authentication; file count ≤ 6; magic-byte MIME va
 
 ## Next production phase
 
-1. Apply the migration to staging and run automated RLS tests with two users, one blocked pair, and one moderator.
+1. Apply all pending migrations—including `20260830121707_message_lifecycle.sql`—to staging and run automated RLS tests with two users, one blocked pair, expired messages, and one moderator.
 2. Implement private Storage upload/derivative Edge Functions and abuse-safe signed URLs.
 3. Move Maya's per-minute burst limit to a distributed limiter; daily limits already use persisted request metadata.
 4. Add transactional notification workers, subscription webhooks, and deletion/export jobs.
-5. Add end-to-end tests for OTP redirects, RLS denial cases, blocked messaging, and race-simulated reciprocal likes.
+5. Add end-to-end tests for OTP redirects, RLS denial cases, blocked messaging, archive restoration, reply/reaction ownership, expiry, and race-simulated reciprocal likes.

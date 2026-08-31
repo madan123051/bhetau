@@ -1,4 +1,4 @@
-import type { AIProvider, MayaProviderResult } from "./provider";
+import { MayaProviderError, type AIProvider, type MayaProviderFailureReason, type MayaProviderResult } from "./provider";
 import type { MayaRequest } from "./schemas";
 import { routeMayaRequest } from "./router";
 
@@ -11,7 +11,11 @@ export type MayaActor = {
 };
 
 export class MayaServiceError extends Error {
-  constructor(public code: "unauthorized" | "underage" | "account_unavailable" | "disabled" | "blocked_context" | "rate_limited" | "provider_failed", message: string) {
+  constructor(
+    public code: "unauthorized" | "underage" | "account_unavailable" | "disabled" | "blocked_context" | "rate_limited" | "provider_failed",
+    message: string,
+    public readonly providerFailure?: { reason: MayaProviderFailureReason; retryable: boolean; upstreamStatus?: number },
+  ) {
     super(message);
   }
 }
@@ -30,7 +34,10 @@ export async function processMayaRequest(request: MayaRequest, actor: MayaActor 
     return await routeMayaRequest(request, provider);
   } catch (error) {
     if (error instanceof MayaServiceError) throw error;
-    throw new MayaServiceError("provider_failed", "Maya couldn’t respond right now.");
+    const providerFailure = error instanceof MayaProviderError
+      ? { reason: error.reason, retryable: error.retryable, upstreamStatus: error.upstreamStatus }
+      : undefined;
+    throw new MayaServiceError("provider_failed", "Maya couldn’t respond right now.", providerFailure);
   }
 }
 

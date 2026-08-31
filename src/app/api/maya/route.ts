@@ -106,9 +106,18 @@ export async function POST(request: Request) {
     const route = classifyMayaRoute(parsed.data.mode);
     const model = route === "knowledge" ? "knowledge-v1" : getModelForRoute(route);
     if (supabase) await supabase.from("maya_requests").insert({ user_id: userId, mode: parsed.data.mode, provider: provider.name, model, latency_ms: latencyMs, status: serviceError.code === "provider_failed" ? "failed" : "blocked" });
-    console.warn(JSON.stringify({ event: "maya_request", status: "failed", code: serviceError.code, userRef: userId.slice(0, 8), mode: parsed.data.mode, latencyMs }));
+    console.warn(JSON.stringify({
+      event: "maya_request",
+      status: "failed",
+      code: serviceError.code,
+      providerReason: serviceError.providerFailure?.reason,
+      upstreamStatus: serviceError.providerFailure?.upstreamStatus,
+      userRef: userId.slice(0, 8),
+      mode: parsed.data.mode,
+      latencyMs,
+    }));
     const status = serviceError.code === "unauthorized" ? 401 : serviceError.code === "rate_limited" ? 429 : serviceError.code === "provider_failed" ? 503 : 403;
-    return noStore({ error: serviceError.message, code: serviceError.code, retryable: serviceError.code === "provider_failed" }, { status });
+    return noStore({ error: serviceError.message, code: serviceError.code, retryable: serviceError.providerFailure?.retryable ?? serviceError.code === "provider_failed" }, { status });
   }
 }
 

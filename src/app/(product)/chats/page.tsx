@@ -1,7 +1,7 @@
 import { conversations as demoConversations, getProfile } from "@/data/profiles";
 import { ChatsList, type ChatListItem } from "@/features/chat/chats-list";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getCurrentProductSession } from "@/lib/supabase/server";
 
 const KATHMANDU_TIME_ZONE = "Asia/Kathmandu";
 
@@ -79,11 +79,8 @@ type ChatSummaryRow = {
 };
 
 async function loadChats(): Promise<{ items: ChatListItem[]; error?: string }> {
-  const supabase = await getSupabaseServerClient();
+  const { supabase, userId } = await getCurrentProductSession();
   if (!supabase) return { items: [] };
-
-  const { data: auth } = await supabase.auth.getClaims();
-  const userId = typeof auth?.claims?.sub === "string" ? auth.claims.sub : null;
   if (!userId) return { items: [], error: "Sign in again to load your conversations." };
 
   const { data, error } = await supabase.rpc("get_my_chat_summaries", { p_limit: 100 });

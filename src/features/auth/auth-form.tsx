@@ -35,7 +35,7 @@ export function AuthForm({ initialError = "" }: { initialError?: string }) {
     setBusy(true);
     const result = await getSupabaseBrowserClient()!.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/auth/confirm?next=/setup` },
+      options: { redirectTo: `${window.location.origin}/auth/confirm?next=/auth` },
     });
     if (result.error) {
       setBusy(false);
@@ -73,7 +73,7 @@ export function AuthForm({ initialError = "" }: { initialError?: string }) {
       ? await client.auth.signInWithOtp({ phone: phone.international })
       : await client.auth.signInWithOtp({
           email: value.trim().toLowerCase(),
-          options: { emailRedirectTo: `${window.location.origin}/auth/confirm?next=/setup` },
+          options: { emailRedirectTo: `${window.location.origin}/auth/confirm?next=/auth` },
         });
     setBusy(false);
     if (result.error) setError(result.error.message);
@@ -99,7 +99,7 @@ export function AuthForm({ initialError = "" }: { initialError?: string }) {
       setError(result.error.message);
       return;
     }
-    router.replace("/setup");
+    router.replace("/auth");
     router.refresh();
   };
 

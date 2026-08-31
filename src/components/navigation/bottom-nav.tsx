@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import { Compass, Heart, MessageCircle, UserRound } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -21,9 +21,10 @@ export function BottomNav() {
           const active = pathname === href || (href === "/chats" && pathname.startsWith("/chats/"));
           return (
             <li key={href}>
-              <Link href={href} aria-current={active ? "page" : undefined} className={cn("flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl text-[11px] font-medium text-stone transition", active && "text-crimson")}>
+              <Link prefetch={false} href={href} aria-current={active ? "page" : undefined} className={cn("relative flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl text-[11px] font-medium text-stone transition", active && "text-crimson")}>
                 <span className={cn("grid size-8 place-items-center rounded-full", active && "bg-crimson/10")}><Icon size={19} strokeWidth={active ? 2.5 : 2} aria-hidden="true" /></span>
                 {label}
+                <PendingIndicator />
               </Link>
             </li>
           );
@@ -31,4 +32,9 @@ export function BottomNav() {
       </ul>
     </nav>
   );
+}
+
+function PendingIndicator() {
+  const { pending } = useLinkStatus();
+  return <span aria-hidden className={cn("absolute right-2 top-1 size-1.5 rounded-full bg-crimson transition-opacity", pending ? "opacity-100" : "opacity-0")} />;
 }

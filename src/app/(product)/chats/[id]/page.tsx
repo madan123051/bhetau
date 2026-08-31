@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { ChatExperience } from "@/features/chat/chat-experience";
 import { getProfile } from "@/data/profiles";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getCurrentProductSession } from "@/lib/supabase/server";
 import type { DemoMessage, Profile } from "@/types/domain";
 
 function promptAnswer(value: unknown) {
@@ -23,9 +23,7 @@ export default async function ChatPage({ params }: { params: Promise<{ id: strin
     return <ChatExperience profile={profile} conversationId={id} demoMode/>;
   }
 
-  const supabase = await getSupabaseServerClient();
-  const { data: auth } = await supabase!.auth.getClaims();
-  const userId = typeof auth?.claims?.sub === "string" ? auth.claims.sub : null;
+  const { supabase, userId } = await getCurrentProductSession();
   if (!userId) notFound();
 
   let { data: conversation } = await supabase!.from("conversations").select("id, match_id, message_ttl_hours").eq("id", id).maybeSingle();

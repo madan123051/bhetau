@@ -1,6 +1,5 @@
 import "server-only";
 
-import { generateText, Output } from "ai";
 import type { MayaMode, MayaRequest, MayaResponse } from "./schemas";
 import { mayaResponseSchema } from "./schemas";
 import { buildMayaUserPayload, MAYA_DISCLOSURE, MAYA_SYSTEM_POLICY } from "./policy";
@@ -147,41 +146,6 @@ function asGeminiProviderError(error: unknown) {
   return new MayaProviderError("network", true);
 }
 
-export class VercelGatewayProvider implements AIProvider {
-  readonly name = "vercel-ai-gateway";
-
-  async generateStructured(input: MayaProviderInput) {
-    const result = await generateText({
-      model: input.model,
-      instructions: MAYA_SYSTEM_POLICY,
-      messages: [{
-        role: "user",
-        content: buildMayaUserPayload(input.mode, input.applicationContext, {
-          input: input.request.input,
-          selectedMessage: input.request.selectedMessage,
-          recentMessages: input.request.recentMessages,
-          currentUserProfile: input.request.currentUserProfile,
-          matchProfile: input.request.matchProfile,
-        }),
-      }],
-      output: Output.object({ name: "MayaResponse", schema: mayaResponseSchema }),
-      maxOutputTokens: 700,
-      abortSignal: AbortSignal.timeout(Number(process.env.MAYA_TIMEOUT_MS ?? 12_000)),
-    });
-    const response = mayaResponseSchema.parse({ ...result.output, mode: input.mode, disclosure: MAYA_DISCLOSURE });
-    return {
-      response,
-      provider: this.name,
-      model: input.model,
-      inputTokens: result.usage.inputTokens,
-      outputTokens: result.usage.outputTokens,
-    };
-  }
-
-  moderate(input: MayaProviderInput) { return this.generateStructured(input); }
-  translate(input: MayaProviderInput) { return this.generateStructured(input); }
-}
-
 export class GoogleGeminiProvider implements AIProvider {
   readonly name = "google-gemini";
 
@@ -313,11 +277,10 @@ function demoTranslation(input: string, target: MayaRequest["targetLanguage"]) {
 }
 
 export function getMayaProvider(): AIProvider {
-  if (isGeminiEnabled()) return new GoogleGeminiProvider();
-  return process.env.MAYA_AI_PROVIDER === "gateway" ? new VercelGatewayProvider() : new DemoMayaProvider();
+  return isGeminiEnabled() ? new GoogleGeminiProvider() : new DemoMayaProvider();
 }
 
 export function isGeminiEnabled() {
-  return process.env.MAYA_AI_PROVIDER === "gemini" || Boolean(process.env.GEMINI_API_KEY);
+  return Boolean(process.env.GEMINI_API_KEY);
 }
 

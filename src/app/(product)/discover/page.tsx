@@ -1,6 +1,6 @@
 import { DiscoveryExperience, type DiscoveryViewer } from "@/features/discovery/discovery-experience";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getCurrentProductSession } from "@/lib/supabase/server";
 import type { Profile } from "@/types/domain";
 
 type InterestRow = { user_id: string; interests: { label_en: string } | { label_en: string }[] | null };
@@ -20,9 +20,7 @@ function promptAnswer(value: unknown) {
 export default async function DiscoverPage() {
   if (!hasSupabaseEnv) return <DiscoveryExperience />;
 
-  const supabase = await getSupabaseServerClient();
-  const { data: auth } = await supabase!.auth.getClaims();
-  const userId = typeof auth?.claims?.sub === "string" ? auth.claims.sub : null;
+  const { supabase, userId } = await getCurrentProductSession();
   if (!userId) return <DiscoveryExperience initialQueue={[]} demoMode={false} />;
 
   const [profileResult, preferencesResult, interestResult, candidatesResult] = await Promise.all([

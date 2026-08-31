@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
 function safeNext(value: string | null) {
-  return value?.startsWith("/") && !value.startsWith("//") ? value : "/setup";
+  return value?.startsWith("/") && !value.startsWith("//") ? value : "/auth";
 }
 
 export async function GET(request: NextRequest) {

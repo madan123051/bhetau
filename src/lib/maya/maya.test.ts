@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { classifyGeminiHttpFailure, GoogleGeminiProvider, parseGeminiStructuredResponse, type AIProvider, type MayaProviderInput, type MayaProviderResult } from "./provider";
+import { classifyGeminiHttpFailure, getMayaProvider, GoogleGeminiProvider, parseGeminiStructuredResponse, type AIProvider, type MayaProviderInput, type MayaProviderResult } from "./provider";
 import { findBhetauHelp } from "./knowledge";
 import { buildMayaUserPayload, MAYA_SYSTEM_POLICY } from "./policy";
 import { classifyMayaRoute, routeMayaRequest } from "./router";
@@ -115,6 +115,11 @@ describe("Maya safety checks", () => {
 });
 
 describe("Maya authorization, rate limits, and failures", () => {
+  it("selects Google Gemini whenever the server key is configured", () => {
+    vi.stubEnv("GEMINI_API_KEY", "server-only-test-key");
+    expect(getMayaProvider().name).toBe("google-gemini");
+  });
+
   it("rejects unauthenticated requests", async () => {
     await expect(processMayaRequest(baseRequest, null, new FakeProvider())).rejects.toMatchObject({ code: "unauthorized" });
   });

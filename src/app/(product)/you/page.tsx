@@ -1,6 +1,7 @@
 import { SettingsExperience } from "@/features/profile/settings-experience";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getCurrentProductSession } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
 import type { CurrentUserProfile } from "@/types/domain";
 
 function ageFromBirthDate(value: string | null) {
@@ -27,18 +28,15 @@ const demoProfile: CurrentUserProfile = {
 export default async function YouPage() {
   if (!hasSupabaseEnv) return <SettingsExperience profile={demoProfile}/>;
 
-  const supabase = await getSupabaseServerClient();
-  const { data: auth } = await supabase!.auth.getClaims();
-  const claims = auth?.claims;
-  const userId = typeof claims?.sub === "string" ? claims.sub : "";
-  const [accountResult, profileResult, interestsResult, photosResult] = await Promise.all([
-    supabase!.from("users").select("birth_date, verification").eq("id", userId).single(),
+  const { supabase, claims, userId, account } = await getCurrentProductSession();
+  if (!supabase || !userId) redirect("/auth");
+  const [profileResult, interestsResult, photosResult] = await Promise.all([
     supabase!.from("profiles").select("first_name, current_area, gender, relationship_intention, languages, bio, prompt_answers, show_age, show_city, show_active_status, read_receipts, discovery_paused, incognito").eq("user_id", userId).single(),
     supabase!.from("user_interests").select("interest_id").eq("user_id", userId),
     supabase!.from("profile_photos").select("id").eq("user_id", userId),
   ]);
-  const account = accountResult.data;
-  const profile = profileResult.data!;
+  const profile = profileResult.data;
+  if (!profile) redirect("/setup?recovery=profile");
   const completed = [profile.first_name, profile.gender, profile.relationship_intention, profile.current_area, profile.languages?.length, profile.bio, Array.isArray(profile.prompt_answers) && profile.prompt_answers.length, interestsResult.data?.length, photosResult.data?.length].filter(Boolean).length;
   const contact = typeof claims?.phone === "string" && claims.phone ? claims.phone : typeof claims?.email === "string" ? claims.email : "";
 

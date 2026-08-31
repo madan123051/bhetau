@@ -3,15 +3,13 @@
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { usePathname } from "next/navigation";
 import { AlertTriangle, ArrowLeft, Check, ChevronRight, Languages, MessageCircleReply, RefreshCw, ShieldCheck, Sparkles, ThumbsDown, ThumbsUp, UserRoundPen, X } from "lucide-react";
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { createPortal } from "react-dom";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { MayaContextMessage, MayaOpenContext } from "./types";
 import type { MayaMode, MayaRequest, MayaResponse } from "@/lib/maya/schemas";
 
 type MayaContextValue = { openMaya: (context?: MayaOpenContext) => void; closeMaya: () => void };
 const MayaContext = createContext<MayaContextValue | null>(null);
-const subscribeToClient = () => () => undefined;
 
 const actions: Array<{ mode: MayaMode; action: string; label: string; detail: string; icon: typeof Sparkles }> = [
   { mode: "conversation_coach", action: "help_reply", label: "Help me reply", detail: "Up to 3 editable options", icon: MessageCircleReply },
@@ -27,14 +25,16 @@ export function MayaProvider({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const [seed, setSeed] = useState<MayaOpenContext>({});
   const [enabled, setEnabled] = useState(true);
+  const [engine, setEngine] = useState("AI assistant");
   const [floatingHidden, setFloatingHidden] = useState(false);
-  const isClient = useSyncExternalStore(subscribeToClient, () => true, () => false);
-  const portalTarget = isClient ? document.body : null;
   useEffect(() => {
     const controller = new AbortController();
     fetch("/api/maya/preferences", { signal: controller.signal })
       .then((response) => response.ok ? response.json() : null)
-      .then((body) => { if (typeof body?.preferences?.enabled === "boolean") setEnabled(body.preferences.enabled); })
+      .then((body) => {
+        if (typeof body?.preferences?.enabled === "boolean") setEnabled(body.preferences.enabled);
+        if (typeof body?.engine === "string") setEngine(body.engine);
+      })
       .catch(() => undefined);
     const onPreference = (event: Event) => setEnabled((event as CustomEvent<{ enabled: boolean }>).detail.enabled);
     const onFloatingVisibility = (event: Event) => setFloatingHidden(Boolean((event as CustomEvent<{ hidden?: boolean }>).detail?.hidden));
@@ -63,23 +63,24 @@ export function MayaProvider({ children }: { children: React.ReactNode }) {
   }, [open]);
 
   const floatingLayer = <>
-    {enabled && !open && !floatingHidden ? <motion.button
+    {enabled && !open && !floatingHidden ? <button
       type="button"
-      onClick={() => openMaya()}
-      initial={false}
-      whileTap={{ scale: 0.94 }}
-      className={`fixed right-4 z-[60] grid size-14 place-items-center rounded-full border border-crimson/20 bg-gradient-to-br from-[#fff7f5] to-[#ffe5e9] text-wine shadow-[0_14px_36px_rgba(143,24,55,.26)] outline-none ring-offset-2 ring-offset-background transition-shadow focus-visible:ring-2 focus-visible:ring-crimson dark:from-[#31171f] dark:to-[#211318] dark:text-[#ff9aac] md:right-[calc((100vw-430px)/2+16px)] ${triggerPosition}`}
+      onClick={(event) => {
+        event.stopPropagation();
+        openMaya();
+      }}
+      className={`fixed right-4 z-[60] grid size-14 place-items-center rounded-full border border-crimson/20 bg-gradient-to-br from-[#fff7f5] to-[#ffe5e9] text-wine shadow-[0_14px_36px_rgba(143,24,55,.26)] outline-none ring-offset-2 ring-offset-background transition duration-150 active:scale-95 focus-visible:ring-2 focus-visible:ring-crimson dark:from-[#31171f] dark:to-[#211318] dark:text-[#ff9aac] md:right-[calc((100vw-430px)/2+16px)] ${triggerPosition}`}
       aria-label="Open Maya AI assistant"
     >
       <Sparkles size={22}/>
       <span className="absolute -right-1 -top-1 rounded-full bg-ink px-1.5 py-0.5 text-[8px] font-bold text-ivory">AI</span>
-    </motion.button> : null}
-    <AnimatePresence>{open ? <MayaSheet initialContext={seed} onClose={closeMaya}/> : null}</AnimatePresence>
+    </button> : null}
+    <AnimatePresence>{open ? <MayaSheet initialContext={seed} engine={engine} onClose={closeMaya}/> : null}</AnimatePresence>
   </>;
 
   return <MayaContext.Provider value={value}>
     {children}
-    {portalTarget ? createPortal(floatingLayer, portalTarget) : null}
+    {floatingLayer}
   </MayaContext.Provider>;
 }
 
@@ -89,7 +90,7 @@ export function useMaya() {
   return context;
 }
 
-function MayaSheet({ initialContext, onClose }: { initialContext: MayaOpenContext; onClose: () => void }) {
+function MayaSheet({ initialContext, engine, onClose }: { initialContext: MayaOpenContext; engine: string; onClose: () => void }) {
   const reduced = useReducedMotion();
   const [mode, setMode] = useState<MayaMode | null>(initialContext.mode ?? null);
   const [action, setAction] = useState(initialContext.action ?? "");
@@ -142,7 +143,7 @@ function MayaSheet({ initialContext, onClose }: { initialContext: MayaOpenContex
   return <motion.div className="fixed inset-0 z-[80] bg-black/48 backdrop-blur-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>
     <motion.section role="dialog" aria-modal="true" aria-labelledby="maya-title" onClick={(event) => event.stopPropagation()} initial={reduced ? { opacity: 0 } : { y: "100%" }} animate={reduced ? { opacity: 1 } : { y: 0 }} exit={reduced ? { opacity: 0 } : { y: "100%" }} transition={{ type: "spring", stiffness: 320, damping: 34 }} className="fixed inset-x-0 bottom-0 mx-auto flex max-h-[88dvh] min-h-[520px] w-full max-w-[430px] flex-col overflow-hidden rounded-t-[28px] bg-background shadow-2xl md:bottom-[max(24px,calc((100dvh-820px)/2))] md:max-h-[760px] md:rounded-[28px]">
       <div className="mx-auto mt-3 h-1.5 w-12 rounded-full bg-foreground/15"/>
-      <header className="flex items-center gap-3 border-b px-5 pb-4 pt-3"><button type="button" onClick={() => mode && !initialContext.mode ? setMode(null) : onClose()} className="grid size-11 place-items-center rounded-full border" aria-label={mode && !initialContext.mode ? "Back to Maya actions" : "Close Maya"}>{mode && !initialContext.mode ? <ArrowLeft size={18}/> : <X size={18}/>}</button><span className="grid size-11 place-items-center rounded-[16px] bg-gradient-to-br from-crimson/15 to-wine/10 text-crimson"><Sparkles size={20}/></span><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><h2 id="maya-title" className="text-lg font-semibold">Maya</h2><span className="rounded-full bg-crimson/10 px-2 py-0.5 text-[9px] font-bold tracking-[.12em] text-crimson">AI</span></div><p className="text-xs text-stone">Your private wingmate inside Bhetau</p></div></header>
+      <header className="flex items-center gap-3 border-b px-5 pb-4 pt-3"><button type="button" onClick={() => mode && !initialContext.mode ? setMode(null) : onClose()} className="grid size-11 place-items-center rounded-full border" aria-label={mode && !initialContext.mode ? "Back to Maya actions" : "Close Maya"}>{mode && !initialContext.mode ? <ArrowLeft size={18}/> : <X size={18}/>}</button><span className="grid size-11 place-items-center rounded-[16px] bg-gradient-to-br from-crimson/15 to-wine/10 text-crimson"><Sparkles size={20}/></span><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><h2 id="maya-title" className="text-lg font-semibold">Maya</h2><span className="rounded-full bg-crimson/10 px-2 py-0.5 text-[9px] font-bold tracking-[.12em] text-crimson">AI</span></div><p className="text-xs text-stone">{engine === "Google Gemini" ? "Powered by Google Gemini" : "Private AI guidance inside Bhetau"}</p></div></header>
       <div className="hide-scrollbar flex-1 overflow-y-auto px-5 py-5">
         {!mode ? <InitialActions choose={choose}/> : <>
           <div className="rounded-[20px] border bg-surface p-4"><p className="text-[10px] font-bold uppercase tracking-[.13em] text-crimson">Clearly disclosed AI</p><p className="mt-2 text-xs leading-5 text-stone">Maya gives optional, editable assistance. She is not a dating profile and never sends messages for you.</p></div>

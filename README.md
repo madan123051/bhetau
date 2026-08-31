@@ -80,15 +80,15 @@ Messages support a same-conversation reply reference, one allowed emoji reaction
 
 Maya is always labeled as an AI assistant and never appears in discovery, matching, or user-to-user conversations as a person. Every Maya request goes through authenticated `/api/maya` server routes, strict Zod input/output schemas, adult/account checks, per-minute and configurable daily limits, conversation-participant checks when a conversation UUID is supplied, and a provider abstraction in `src/lib/maya`.
 
-The default `MAYA_AI_PROVIDER=demo` uses deterministic server-side help, safety, translation samples, and coaching output so local development remains functional without credentials. Add the server-only `GEMINI_API_KEY` in Vercel to activate direct Google Gemini automatically; `GEMINI_MODEL=gemini-2.5-flash` is the default, with optional fast/smart/safety overrides. Set `MAYA_AI_PROVIDER=gateway` only when you prefer Vercel AI Gateway. Vercel deployments can authenticate through OIDC; non-Vercel environments can provide the server-only `AI_GATEWAY_API_KEY`. Gateway model routing is controlled by:
+Without credentials, Maya uses deterministic server-side help, safety, translation samples, and coaching output so local development stays functional. Add the server-only `GEMINI_API_KEY` in Vercel to activate Google Gemini automatically. Production has no OpenAI or AI Gateway fallback. `GEMINI_MODEL=gemini-2.5-flash` is the default, with optional route-specific overrides:
 
 ```env
-MAYA_FAST_MODEL=openai/gpt-5.4-mini
-MAYA_SMART_MODEL=openai/gpt-5.4
-MAYA_SAFETY_MODEL=openai/gpt-5.4-mini
+GEMINI_FAST_MODEL=gemini-2.5-flash
+GEMINI_SMART_MODEL=gemini-2.5-flash
+GEMINI_SAFETY_MODEL=gemini-2.5-flash
 ```
 
-Do not prefix these, `GEMINI_API_KEY`, or `AI_GATEWAY_API_KEY` with `NEXT_PUBLIC_`. Profile text and message content are treated as untrusted user data, kept separate from system policy, and never written to Maya analytics. At most 10 recent messages are accepted. `maya_requests` stores only user/match IDs, mode, provider/model, latency, token counts, status, and time; `maya_feedback` and `maya_preferences` are owner-scoped through RLS.
+Do not prefix these or `GEMINI_API_KEY` with `NEXT_PUBLIC_`. Profile text and message content are treated as untrusted user data, kept separate from system policy, and never written to Maya analytics. At most 10 recent messages are accepted. `maya_requests` stores only user/match IDs, mode, provider/model, latency, token counts, status, and time; `maya_feedback` and `maya_preferences` are owner-scoped through RLS.
 
 The Bhetau help mode is answered from a dedicated local knowledge base rather than generated product behavior. High-signal safety patterns such as money requests, crypto pitches, threats, sexual pressure, suspicious links, and underage signals receive cautious local warnings before model routing. Provider failures return a retryable Maya error without interrupting normal chat.
 

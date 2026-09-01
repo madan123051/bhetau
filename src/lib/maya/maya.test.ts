@@ -56,7 +56,7 @@ describe("Maya schemas and privacy boundaries", () => {
 
 describe("Maya routing", () => {
   it("uses the supported Gemini alias and trims configured values", () => {
-    expect(getModelForRoute("fast")).toBe("gemini-flash-latest");
+    expect(getModelForRoute("fast")).toBe("gemini-3.5-flash");
     vi.stubEnv("GEMINI_MODEL", "  gemini-3.5-flash  ");
     expect(getModelForRoute("smart")).toBe("gemini-3.5-flash");
   });
@@ -210,6 +210,25 @@ describe("Maya authorization, rate limits, and failures", () => {
     expect(requestBody.generationConfig?.responseMimeType).toBe("application/json");
     expect(requestBody.generationConfig?.responseJsonSchema).toBeTruthy();
     expect(requestBody.generationConfig?.thinkingConfig?.thinkingBudget).toBe(0);
+  });
+
+  it("uses low thinking for Gemini 3 chat latency", async () => {
+    vi.stubEnv("GEMINI_API_KEY", "server-only-test-key");
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      candidates: [{ content: { parts: [{ text: JSON.stringify(safeResponse("translation")) }] }, finishReason: "STOP" }],
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await new GoogleGeminiProvider().generateStructured({
+      mode: "translation",
+      model: "gemini-3.5-flash",
+      request: { ...baseRequest, mode: "translation", action: "translate" },
+      applicationContext: { action: "translate" },
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    const requestBody = JSON.parse(String(init.body)) as { generationConfig?: { thinkingConfig?: { thinkingLevel?: string } } };
+    expect(requestBody.generationConfig?.thinkingConfig?.thinkingLevel).toBe("low");
   });
 });
 

@@ -19,7 +19,7 @@ export function getModelForRoute(route: Exclude<MayaModelRoute, "knowledge">) {
     : route === "safety"
       ? process.env.GEMINI_SAFETY_MODEL ?? process.env.GEMINI_MODEL
       : process.env.GEMINI_FAST_MODEL ?? process.env.GEMINI_MODEL;
-  return configured?.trim() || "gemini-flash-latest";
+  return configured?.trim() || "gemini-3.5-flash";
 }
 
 export async function routeMayaRequest(request: MayaRequest, provider: AIProvider): Promise<MayaProviderResult> {

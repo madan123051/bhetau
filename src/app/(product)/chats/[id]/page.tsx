@@ -4,9 +4,9 @@ import { notFound, redirect } from "next/navigation";
 import { ChatExperience } from "@/features/chat/chat-experience";
 import { getProfile } from "@/data/profiles";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
+import { loadSignedProfilePhotoUrls } from "@/lib/supabase/profile-photo-urls";
 import { getCurrentProductSession } from "@/lib/supabase/server";
 import type { DemoMessage, Profile } from "@/types/domain";
-import { PROFILE_PHOTO_BUCKET } from "@/lib/profile-photo";
 
 function promptAnswer(value: unknown) {
   const first = Array.isArray(value) && value[0] && typeof value[0] === "object"
@@ -115,10 +115,10 @@ export default async function ChatPage({ params }: { params: Promise<{ id: strin
   const otherUserId = match.user_low === userId ? match.user_high : match.user_high === userId ? match.user_low : null;
   if (!otherUserId) notFound();
 
-  const [profileResult, interestResult, photoResult, advancedMessageResult] = await Promise.all([
+  const [profileResult, interestResult, thumbnailUrls, advancedMessageResult] = await Promise.all([
     supabase.from("profiles").select("first_name, current_area, from_place, occupation, relationship_intention, languages, lifestyle, bio, prompt_answers").eq("user_id", otherUserId).maybeSingle(),
     supabase.from("user_interests").select("interests(label_en)").eq("user_id", otherUserId),
-    supabase.from("profile_photos").select("storage_path").eq("user_id", otherUserId).eq("position", 1).eq("moderation_state", "approved").maybeSingle(),
+    loadSignedProfilePhotoUrls(supabase, [otherUserId]),
     supabase.from("messages").select("id, sender_id, body, created_at, edited_at, deleted_at, expires_at, reply_to_id, message_reactions(user_id, emoji)").eq("conversation_id", conversation.id).order("created_at", { ascending: false }).limit(100),
   ]);
   if (profileResult.error) reportChatFailure("profile", profileResult.error);
@@ -136,9 +136,6 @@ export default async function ChatPage({ params }: { params: Promise<{ id: strin
   }
 
   const profileData = profileResult.data;
-  const signedPhoto = photoResult.data?.storage_path
-    ? await supabase.storage.from(PROFILE_PHOTO_BUCKET).createSignedUrl(photoResult.data.storage_path, 60 * 60)
-    : null;
   const prompt = promptAnswer(profileData?.prompt_answers);
   const interests = (interestResult.data ?? [])
     .flatMap((row) => Array.isArray(row.interests) ? row.interests : row.interests ? [row.interests] : [])
@@ -158,7 +155,7 @@ export default async function ChatPage({ params }: { params: Promise<{ id: strin
     prompt: prompt.prompt,
     answer: prompt.answer,
     bio: profileData?.bio ?? "You matched on Bhetau. Start with a thoughtful hello.",
-    thumbnailUrl: signedPhoto?.data?.signedUrl ?? null,
+    thumbnailUrl: thumbnailUrls.get(otherUserId) ?? null,
     promptAffinity: 0.5,
   };
   rawMessages = [...rawMessages].reverse();

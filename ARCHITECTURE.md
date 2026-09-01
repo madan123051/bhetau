@@ -74,7 +74,9 @@ Maya analytics deliberately exclude prompts and message content. `maya_requests`
 
 ## Upload pipeline
 
-Production uploads require: authentication; file count ≤ 6; magic-byte MIME validation; image-only allow list; 15 MB input cap; pixel/dimension and decompression-bomb checks; metadata stripping; safety moderation; 4:5 WebP/AVIF derivatives; private originals; short-lived signed derivatives; and cleanup on profile/account deletion.
+The current profile-photo route requires authentication, accepts JPEG/PNG/WebP up to 5 MB, verifies the binary signature instead of trusting the browser MIME label, stores the original in a private bucket, and serves short-lived signed URLs only to viewers authorized by profile/photo RLS. Because no asynchronous photo-moderation worker is configured yet, files that pass those checks are published immediately; `20260901231504_publish_validated_profile_photos.sql` backfills uploads that were previously stuck in `pending`.
+
+The production upload phase still requires: file count ≤ 6; pixel/dimension and decompression-bomb checks; metadata stripping; safety moderation; 4:5 WebP/AVIF derivatives; private originals; short-lived signed derivatives; and cleanup on profile/account deletion.
 
 ## Next production phase
 

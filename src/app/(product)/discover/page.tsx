@@ -1,5 +1,6 @@
 import { DiscoveryExperience, type DiscoveryViewer } from "@/features/discovery/discovery-experience";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
+import { loadSignedProfilePhotoUrls } from "@/lib/supabase/profile-photo-urls";
 import { getCurrentProductSession } from "@/lib/supabase/server";
 import type { Profile } from "@/types/domain";
 
@@ -23,12 +24,22 @@ export default async function DiscoverPage() {
   const { supabase, userId } = await getCurrentProductSession();
   if (!userId) return <DiscoveryExperience initialQueue={[]} demoMode={false} />;
 
-  const [profileResult, preferencesResult, interestResult, candidatesResult] = await Promise.all([
+  const candidatesPromise = Promise.resolve(
+    supabase!.from("profiles").select("user_id, first_name, current_area, from_place, occupation, relationship_intention, languages, lifestyle, bio, prompt_answers, show_age").neq("user_id", userId).order("last_active_at", { ascending: false, nullsFirst: false }).limit(30),
+  );
+  const thumbnailUrlsPromise = candidatesPromise.then((result) => loadSignedProfilePhotoUrls(supabase!, [
+    userId,
+    ...(result.data ?? []).map((candidate) => candidate.user_id),
+  ]));
+  const [profileResult, preferencesResult, interestResult, candidatesResult, thumbnailUrls] = await Promise.all([
     supabase!.from("profiles").select("first_name, current_area, relationship_intention, languages, lifestyle").eq("user_id", userId).maybeSingle(),
     supabase!.from("preferences").select("min_age, max_age").eq("user_id", userId).maybeSingle(),
     supabase!.from("user_interests").select("user_id, interests(label_en)"),
-    supabase!.from("profiles").select("user_id, first_name, current_area, from_place, occupation, relationship_intention, languages, lifestyle, bio, prompt_answers, show_age").neq("user_id", userId).order("last_active_at", { ascending: false, nullsFirst: false }).limit(30),
+    candidatesPromise,
+    thumbnailUrlsPromise,
   ]);
+
+  const candidates = candidatesResult.data ?? [];
 
   const viewer: DiscoveryViewer = {
     firstName: profileResult.data?.first_name ?? "You",
@@ -38,9 +49,10 @@ export default async function DiscoverPage() {
     interests: interestLabels(interestResult.data as InterestRow[] | null, userId),
     languages: profileResult.data?.languages ?? [],
     lifestyle: profileResult.data?.lifestyle ?? [],
+    thumbnailUrl: thumbnailUrls.get(userId) ?? null,
   };
 
-  const queue: Profile[] = (candidatesResult.data ?? []).map((candidate) => {
+  const queue: Profile[] = candidates.map((candidate) => {
     const prompt = promptAnswer(candidate.prompt_answers);
     return {
       id: candidate.user_id,
@@ -57,6 +69,7 @@ export default async function DiscoverPage() {
       prompt: prompt.prompt,
       answer: prompt.answer,
       bio: candidate.bio,
+      thumbnailUrl: thumbnailUrls.get(candidate.user_id) ?? null,
       promptAffinity: 0.5,
     };
   });

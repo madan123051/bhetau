@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { checkPrototypeRateLimit } from "@/lib/rate-limit";
-import { hasSupportedProfilePhotoSignature, PROFILE_PHOTO_BUCKET, profilePhotoExtension, validateProfilePhoto } from "@/lib/profile-photo";
+import { hasSupportedProfilePhotoSignature, PROFILE_PHOTO_BUCKET, PROFILE_PHOTO_PUBLISH_STATE, profilePhotoExtension, validateProfilePhoto } from "@/lib/profile-photo";
 import { getUserScopedServerClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -77,7 +77,9 @@ export async function POST(request: Request) {
     derivative_path: null,
     bytes: photo.size,
     mime_type: photo.type,
-    moderation_state: "pending",
+    // The current MVP has no asynchronous photo-moderation worker. Files are
+    // published only after the route validates size, MIME type, and signature.
+    moderation_state: PROFILE_PHOTO_PUBLISH_STATE,
   };
   const metadataResult = currentPhoto
     ? await supabase.from("profile_photos").update(metadata).eq("id", currentPhoto.id).select("id").single()
@@ -104,6 +106,6 @@ export async function POST(request: Request) {
   return NextResponse.json({
     uploaded: true,
     thumbnailUrl: signedPhotoError ? null : signedPhoto.signedUrl,
-    moderationState: "pending",
+    moderationState: PROFILE_PHOTO_PUBLISH_STATE,
   }, { status: 201, headers: privateResponse });
 }

@@ -65,7 +65,7 @@ export function SettingsExperience({ profile }: { profile: CurrentUserProfile })
       if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
       previewUrlRef.current = null;
     }
-    setNotice(payload?.demo ? "Photo preview updated in demo mode." : "Photo uploaded privately and queued for review.");
+    setNotice(payload?.demo ? "Photo preview updated in demo mode." : "Photo uploaded securely and is now visible on your Bhetau profile.");
   };
 
   const toggle = async (key: SettingKey) => {

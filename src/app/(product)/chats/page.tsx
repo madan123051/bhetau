@@ -2,7 +2,7 @@ import { conversations as demoConversations, getProfile } from "@/data/profiles"
 import { ChatsList, type ChatListItem } from "@/features/chat/chats-list";
 import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { getCurrentProductSession } from "@/lib/supabase/server";
-import { PROFILE_PHOTO_BUCKET } from "@/lib/profile-photo";
+import { loadSignedProfilePhotoUrls } from "@/lib/supabase/profile-photo-urls";
 
 const KATHMANDU_TIME_ZONE = "Asia/Kathmandu";
 
@@ -94,28 +94,8 @@ async function attachChatThumbnails(
 ) {
   const userIds = [...new Set(items.map((item) => item.profileId))];
   if (!userIds.length) return items;
-
-  const { data: photos, error } = await supabase
-    .from("profile_photos")
-    .select("user_id, storage_path")
-    .in("user_id", userIds)
-    .eq("position", 1)
-    .eq("moderation_state", "approved");
-  if (error || !photos?.length) {
-    if (error) reportChatQueryFailure("chat_thumbnails", error);
-    return items;
-  }
-
-  const paths = photos.map((photo) => photo.storage_path);
-  const signed = await supabase.storage.from(PROFILE_PHOTO_BUCKET).createSignedUrls(paths, 60 * 60);
-  if (signed.error) {
-    reportChatQueryFailure("chat_thumbnail_urls", signed.error);
-    return items;
-  }
-
-  const signedByPath = new Map((signed.data ?? []).flatMap((photo) => photo.signedUrl ? [[photo.path, photo.signedUrl] as const] : []));
-  const pathByUser = new Map(photos.map((photo) => [photo.user_id, photo.storage_path]));
-  return items.map((item) => ({ ...item, thumbnailUrl: signedByPath.get(pathByUser.get(item.profileId) ?? "") ?? null }));
+  const thumbnailUrls = await loadSignedProfilePhotoUrls(supabase, userIds);
+  return items.map((item) => ({ ...item, thumbnailUrl: thumbnailUrls.get(item.profileId) ?? null }));
 }
 
 async function loadLegacyChats(

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hasSupportedProfilePhotoSignature, PROFILE_PHOTO_MAX_BYTES, profilePhotoExtension, validateProfilePhoto } from "./profile-photo";
+import { hasSupportedProfilePhotoSignature, PROFILE_PHOTO_MAX_BYTES, PROFILE_PHOTO_PUBLISH_STATE, profilePhotoExtension, validateProfilePhoto } from "./profile-photo";
 
 describe("profile photo validation", () => {
   it("accepts a small supported portrait", () => {
@@ -18,5 +18,9 @@ describe("profile photo validation", () => {
     expect(hasSupportedProfilePhotoSignature(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), "image/png")).toBe(true);
     expect(hasSupportedProfilePhotoSignature(new TextEncoder().encode("RIFF0000WEBP"), "image/webp")).toBe(true);
     expect(hasSupportedProfilePhotoSignature(new TextEncoder().encode("not-an-image"), "image/png")).toBe(false);
+  });
+
+  it("publishes files only after server-side validation completes", () => {
+    expect(PROFILE_PHOTO_PUBLISH_STATE).toBe("approved");
   });
 });

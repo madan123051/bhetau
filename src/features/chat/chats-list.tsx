@@ -14,6 +14,7 @@ export type ChatListItem = {
   city: string;
   verified: boolean;
   portrait?: PortraitQuadrant;
+  thumbnailUrl?: string | null;
   lastMessage: string;
   timestamp: string;
   timestampIso: string | null;
@@ -25,6 +26,7 @@ export type ChatListItem = {
 function Avatar({ item, size = "large" }: { item: ChatListItem; size?: "small" | "large" }) {
   return (
     <Portrait
+      src={item.thumbnailUrl}
       quadrant={item.portrait}
       initials={item.firstName}
       alt={item.portrait ? `Fictional portrait of ${item.firstName}` : `${item.firstName}'s profile placeholder`}

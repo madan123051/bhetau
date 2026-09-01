@@ -2,14 +2,15 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { BadgeCheck, Bell, ChevronRight, Download, EyeOff, Languages, LockKeyhole, LogOut, MapPin, PauseCircle, Pencil, ShieldCheck, Trash2, type LucideIcon } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { BadgeCheck, Bell, Camera, ChevronRight, Download, EyeOff, Languages, LoaderCircle, LockKeyhole, LogOut, MapPin, PauseCircle, Pencil, ShieldCheck, Trash2, type LucideIcon } from "lucide-react";
 import { Portrait } from "@/components/profile/portrait";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { dictionaries, type Locale } from "@/lib/i18n";
 import { getSupabaseBrowserClient, hasSupabaseEnv } from "@/lib/supabase/client";
 import { MayaSettings } from "@/features/maya/maya-settings";
 import type { CurrentUserProfile } from "@/types/domain";
+import { validateProfilePhoto } from "@/lib/profile-photo";
 
 type SettingKey = keyof CurrentUserProfile["settings"];
 
@@ -20,7 +21,52 @@ export function SettingsExperience({ profile }: { profile: CurrentUserProfile })
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState<SettingKey | null>(null);
   const [signingOut, setSigningOut] = useState(false);
+  const [thumbnailUrl, setThumbnailUrl] = useState(profile.thumbnailUrl ?? null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const previewUrlRef = useRef<string | null>(null);
   const t = dictionaries[locale];
+
+  useEffect(() => () => {
+    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+  }, []);
+
+  const uploadPhoto = async (file: File | undefined) => {
+    if (!file || uploadingPhoto) return;
+    const validationError = validateProfilePhoto(file);
+    if (validationError) {
+      setNotice(validationError);
+      return;
+    }
+
+    const previousUrl = thumbnailUrl;
+    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+    previewUrlRef.current = URL.createObjectURL(file);
+    setThumbnailUrl(previewUrlRef.current);
+    setUploadingPhoto(true);
+    setNotice("");
+
+    const body = new FormData();
+    body.set("photo", file);
+    const response = await fetch("/api/profile/photo", { method: "POST", body }).catch(() => null);
+    const payload = response ? await response.json().catch(() => null) : null;
+    setUploadingPhoto(false);
+
+    if (!response?.ok) {
+      setThumbnailUrl(previousUrl);
+      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = null;
+      setNotice(payload?.error ?? "Photo upload failed. Please retry.");
+      return;
+    }
+
+    if (typeof payload?.thumbnailUrl === "string") {
+      setThumbnailUrl(payload.thumbnailUrl);
+      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = null;
+    }
+    setNotice(payload?.demo ? "Photo preview updated in demo mode." : "Photo uploaded privately and queued for review.");
+  };
 
   const toggle = async (key: SettingKey) => {
     const nextValue = !settings[key];
@@ -51,7 +97,7 @@ export function SettingsExperience({ profile }: { profile: CurrentUserProfile })
 
   return <main className="pb-8 pt-[max(18px,env(safe-area-inset-top))]">
     <div className="flex items-center justify-between px-5"><div><p className="text-xs font-bold tracking-[.14em] text-crimson">YOUR SPACE</p><h1 className="mt-1 text-3xl font-semibold tracking-[-.04em]">You</h1></div><ThemeToggle/></div>
-      <section className="relative mx-5 mt-5 overflow-hidden rounded-[26px] border bg-surface p-4 shadow-[0_18px_55px_rgba(69,25,39,.08)]"><div className="pointer-events-none absolute -right-12 -top-16 size-40 rounded-full bg-crimson/8 blur-2xl"/><div className="relative flex items-center gap-4"><Portrait quadrant={profile.userId ? undefined : "bl"} initials={profile.firstName} alt={`${profile.firstName}'s profile placeholder`} className="size-[76px] shrink-0 rounded-[22px]"/><div className="min-w-0 flex-1"><div className="flex items-center gap-1.5"><p className="truncate text-xl font-semibold">{profile.firstName}{profile.age ? `, ${profile.age}` : ""}</p>{profile.verified && <BadgeCheck size={18} className="shrink-0 fill-success text-white" aria-label="Verified"/>}</div><p className="mt-1 flex items-center gap-1 truncate text-xs text-stone"><MapPin size={13} className="shrink-0"/>{profile.city}</p>{profile.contact && <p className="mt-1 truncate text-[11px] text-stone">{profile.contact}</p>}</div><Link href="/setup" aria-label="Edit profile" className="grid size-11 shrink-0 place-items-center rounded-full bg-crimson text-white shadow-lg shadow-crimson/20"><Pencil size={17}/></Link></div><div className="relative mt-4"><div className="mb-2 flex items-center justify-between text-xs"><span className="font-semibold">Profile strength</span><span className="font-bold text-crimson">{profile.completion}%</span></div><div className="h-2 overflow-hidden rounded-full bg-foreground/8"><div className="h-full rounded-full bg-gradient-to-r from-[#ff5a72] to-[#d72c55]" style={{ width: `${profile.completion}%` }}/></div><Link href="/setup" className="mt-2 inline-flex min-h-9 items-center gap-1 text-xs font-semibold text-crimson">Complete or update profile <ChevronRight size={14}/></Link></div></section>
+      <section className="relative mx-5 mt-5 overflow-hidden rounded-[26px] border bg-surface p-4 shadow-[0_18px_55px_rgba(69,25,39,.08)]"><div className="pointer-events-none absolute -right-12 -top-16 size-40 rounded-full bg-crimson/8 blur-2xl"/><div className="relative flex items-center gap-4"><div className="relative shrink-0"><Portrait src={thumbnailUrl} quadrant={profile.userId ? undefined : "bl"} initials={profile.firstName} alt={`${profile.firstName}'s profile photo`} className="size-[76px] rounded-[22px]"/><input ref={photoInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(event) => { void uploadPhoto(event.target.files?.[0]); event.currentTarget.value = ""; }}/><button type="button" disabled={uploadingPhoto} onClick={() => photoInputRef.current?.click()} aria-label={thumbnailUrl ? "Change profile photo" : "Upload profile photo"} className="absolute -bottom-2 -right-2 grid size-10 place-items-center rounded-full border-2 border-surface bg-crimson text-white shadow-lg disabled:opacity-60">{uploadingPhoto ? <LoaderCircle size={17} className="animate-spin"/> : <Camera size={17}/>}</button></div><div className="min-w-0 flex-1"><div className="flex items-center gap-1.5"><p className="truncate text-xl font-semibold">{profile.firstName}{profile.age ? `, ${profile.age}` : ""}</p>{profile.verified && <BadgeCheck size={18} className="shrink-0 fill-success text-white" aria-label="Verified"/>}</div><p className="mt-1 flex items-center gap-1 truncate text-xs text-stone"><MapPin size={13} className="shrink-0"/>{profile.city}</p>{profile.contact && <p className="mt-1 truncate text-[11px] text-stone">{profile.contact}</p>}<button type="button" disabled={uploadingPhoto} onClick={() => photoInputRef.current?.click()} className="mt-1 min-h-7 text-[11px] font-semibold text-crimson">{thumbnailUrl ? "Change photo" : "Add profile photo"}</button></div><Link href="/setup" aria-label="Edit profile" className="grid size-11 shrink-0 place-items-center rounded-full bg-crimson text-white shadow-lg shadow-crimson/20"><Pencil size={17}/></Link></div><div className="relative mt-4"><div className="mb-2 flex items-center justify-between text-xs"><span className="font-semibold">Profile strength</span><span className="font-bold text-crimson">{profile.completion}%</span></div><div className="h-2 overflow-hidden rounded-full bg-foreground/8"><div className="h-full rounded-full bg-gradient-to-r from-[#ff5a72] to-[#d72c55]" style={{ width: `${profile.completion}%` }}/></div><Link href="/setup" className="mt-2 inline-flex min-h-9 items-center gap-1 text-xs font-semibold text-crimson">Complete or update profile <ChevronRight size={14}/></Link></div></section>
     {notice && <div role="status" className={`mx-5 mt-4 rounded-2xl px-4 py-3 text-xs font-medium ${notice.includes("could not") || notice.includes("error") ? "bg-crimson/10 text-crimson" : "bg-success/10 text-success"}`}>{notice}</div>}
     <SettingsSection title="Discovery & privacy"><SettingToggle icon={PauseCircle} label="Discovery visibility" hint="Pause your profile from being shown" value={settings.visibility} busy={saving !== null} onChange={() => toggle("visibility")}/><SettingToggle icon={EyeOff} label="Incognito mode" hint="Only people you like can see you" value={settings.incognito} busy={saving !== null} onChange={() => toggle("incognito")}/><SettingToggle label="Show age" value={settings.age} busy={saving !== null} onChange={() => toggle("age")}/><SettingToggle label="Show city" hint="Approximate area only" value={settings.city} busy={saving !== null} onChange={() => toggle("city")}/><SettingToggle label="Show active status" value={settings.active} busy={saving !== null} onChange={() => toggle("active")}/><SettingToggle label="Read receipts" value={settings.receipts} busy={saving !== null} onChange={() => toggle("receipts")}/></SettingsSection>
     <SettingsSection title="Safety & account"><LinkRow href="/safety" icon={ShieldCheck} label="Safety center"/><LinkRow href="#" icon={LockKeyhole} label="Blocked users"/><LinkRow href="#" icon={Bell} label="Notifications"/></SettingsSection>

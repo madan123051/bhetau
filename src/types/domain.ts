@@ -23,6 +23,7 @@ export interface Profile {
   answer: string;
   bio: string;
   portrait?: PortraitQuadrant;
+  thumbnailUrl?: string | null;
   promptAffinity: number;
 }
 
@@ -78,6 +79,7 @@ export interface CurrentUserProfile {
   verified: boolean;
   completion: number;
   contact: string;
+  thumbnailUrl?: string | null;
   settings: {
     age: boolean;
     city: boolean;

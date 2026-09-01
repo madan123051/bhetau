@@ -8,7 +8,6 @@ import {
   Ban,
   Check,
   CheckCheck,
-  ChevronDown,
   Clock3,
   Copy,
   Flag,
@@ -27,14 +26,10 @@ import {
 import { Portrait } from "@/components/profile/portrait";
 import { Button } from "@/components/ui/button";
 import { currentUser } from "@/data/profiles";
+import { IcebreakerPanel } from "@/features/chat/icebreaker-panel";
 import { useMaya } from "@/features/maya/maya-provider";
 import { cn } from "@/lib/utils";
 import type { DemoMessage, Profile } from "@/types/domain";
-
-const starters = [
-  "You both selected trekking — ask which trail they’d repeat.",
-  "You both like coffee — ask for their most overrated café take.",
-];
 
 const reactionOptions = [
   { emoji: "❤️", label: "love" },
@@ -96,7 +91,6 @@ export function ChatExperience({
   ];
   const [messages, setMessages] = useState<DemoMessage[]>(initialMessages ?? (demoMode ? demoMessages : []));
   const [draft, setDraft] = useState("");
-  const [starter, setStarter] = useState(starters[0]);
   const [menu, setMenu] = useState(false);
   const [timerMenu, setTimerMenu] = useState(false);
   const [timerHours, setTimerHours] = useState<TimerHours>(initialTimerHours);
@@ -393,7 +387,7 @@ export function ChatExperience({
           <ArrowLeft size={20}/>
         </Link>
         <button type="button" onClick={() => setProfileOpen(true)} className="flex min-w-0 flex-1 items-center gap-2 rounded-2xl text-left" aria-label={`Open ${profile.firstName}'s profile`}>
-          <Portrait quadrant={profile.portrait} initials={profile.firstName} alt={profile.portrait ? `Fictional portrait of ${profile.firstName}` : `${profile.firstName}'s profile placeholder`} className="size-11 shrink-0 rounded-full"/>
+          <Portrait src={profile.thumbnailUrl} quadrant={profile.portrait} initials={profile.firstName} alt={profile.portrait ? `Fictional portrait of ${profile.firstName}` : `${profile.firstName}'s profile photo`} className="size-11 shrink-0 rounded-full"/>
           <span className="min-w-0 flex-1">
             <span className="block truncate font-semibold">{profile.firstName} {profile.verified ? <span className="text-success">✓</span> : null}</span>
             <span className="block truncate text-xs text-stone">View profile · {profile.city}</span>
@@ -451,17 +445,7 @@ export function ChatExperience({
         </div>
       ) : null}
 
-      <div className="border-b bg-[#fff4f1] px-4 py-3 dark:bg-[#21171a]">
-        <div className="flex items-start gap-3">
-          <Reply size={17} className="mt-0.5 shrink-0 text-crimson"/>
-          <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-bold uppercase tracking-[.12em] text-crimson">Editable icebreaker</p>
-            <textarea value={starter} onChange={(event) => setStarter(event.target.value)} className="mt-1 min-h-10 w-full resize-none bg-transparent text-xs leading-5 outline-none" aria-label="Editable icebreaker"/>
-            <button type="button" onClick={() => { setDraft(starter.replace(/^You both.*?— /, "")); focusComposer(); }} className="mt-1 min-h-8 text-xs font-semibold text-wine dark:text-[#ff9aac]">Use as a starting point</button>
-          </div>
-          <button type="button" onClick={() => setStarter(starters[1])} className="grid size-9 place-items-center rounded-full bg-surface" aria-label="Next icebreaker"><ChevronDown size={16}/></button>
-        </div>
-      </div>
+      <IcebreakerPanel onUse={(suggestion) => { setDraft(suggestion); focusComposer(); }}/>
 
       {timerHours ? (
         <div className="flex items-center justify-center gap-1.5 border-b bg-crimson/5 px-3 py-2 text-[10px] font-medium text-wine dark:text-[#ff9aac]">
@@ -606,7 +590,7 @@ function ChatProfileSheet({ profile, onClose }: { profile: Profile; onClose: () 
     >
       <div className="mx-auto h-1.5 w-12 rounded-full bg-foreground/15"/>
       <div className="mt-4 flex items-start gap-4">
-        <Portrait quadrant={profile.portrait} initials={profile.firstName} alt={`${profile.firstName}'s profile`} className="size-20 shrink-0 rounded-[24px]"/>
+        <Portrait src={profile.thumbnailUrl} quadrant={profile.portrait} initials={profile.firstName} alt={`${profile.firstName}'s profile`} className="size-20 shrink-0 rounded-[24px]"/>
         <div className="min-w-0 flex-1 pt-1">
           <h2 id="chat-profile-name" className="truncate text-2xl font-semibold">{profile.firstName}{profile.age ? `, ${profile.age}` : ""} {profile.verified ? <span className="text-success">✓</span> : null}</h2>
           <p className="mt-1 text-sm text-stone">{profile.city}</p>

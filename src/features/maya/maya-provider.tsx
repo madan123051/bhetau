@@ -28,19 +28,7 @@ export function MayaProvider({ children, initialEngine = "AI assistant" }: { chi
   const [engine, setEngine] = useState(initialEngine);
   const [floatingHidden, setFloatingHidden] = useState(false);
   const preferencesLoaded = useRef(false);
-  useEffect(() => {
-    const onPreference = (event: Event) => setEnabled((event as CustomEvent<{ enabled: boolean }>).detail.enabled);
-    const onFloatingVisibility = (event: Event) => setFloatingHidden(Boolean((event as CustomEvent<{ hidden?: boolean }>).detail?.hidden));
-    window.addEventListener("bhetau:maya-enabled", onPreference);
-    window.addEventListener("bhetau:maya-floating-visibility", onFloatingVisibility);
-    return () => {
-      window.removeEventListener("bhetau:maya-enabled", onPreference);
-      window.removeEventListener("bhetau:maya-floating-visibility", onFloatingVisibility);
-    };
-  }, []);
-  const openMaya = useCallback((context: MayaOpenContext = {}) => {
-    setSeed(context);
-    setOpen(true);
+  const loadPreferences = useCallback(() => {
     if (preferencesLoaded.current) return;
     preferencesLoaded.current = true;
     void fetch("/api/maya/preferences")
@@ -51,6 +39,33 @@ export function MayaProvider({ children, initialEngine = "AI assistant" }: { chi
       })
       .catch(() => undefined);
   }, []);
+  useEffect(() => {
+    const onPreference = (event: Event) => setEnabled((event as CustomEvent<{ enabled: boolean }>).detail.enabled);
+    const onFloatingVisibility = (event: Event) => setFloatingHidden(Boolean((event as CustomEvent<{ hidden?: boolean }>).detail?.hidden));
+    window.addEventListener("bhetau:maya-enabled", onPreference);
+    window.addEventListener("bhetau:maya-floating-visibility", onFloatingVisibility);
+    return () => {
+      window.removeEventListener("bhetau:maya-enabled", onPreference);
+      window.removeEventListener("bhetau:maya-floating-visibility", onFloatingVisibility);
+    };
+  }, []);
+  useEffect(() => {
+    const idleWindow = window as unknown as {
+      requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    if (idleWindow.requestIdleCallback) {
+      const idleId = idleWindow.requestIdleCallback(loadPreferences, { timeout: 1200 });
+      return () => idleWindow.cancelIdleCallback?.(idleId);
+    }
+    const timeoutId = globalThis.setTimeout(loadPreferences, 180);
+    return () => globalThis.clearTimeout(timeoutId);
+  }, [loadPreferences]);
+  const openMaya = useCallback((context: MayaOpenContext = {}) => {
+    setSeed(context);
+    setOpen(true);
+    loadPreferences();
+  }, [loadPreferences]);
   const closeMaya = useCallback(() => setOpen(false), []);
   const value = useMemo(() => ({ openMaya, closeMaya }), [closeMaya, openMaya]);
   const isChatDetail = /^\/chats\/[^/]+$/.test(pathname);
@@ -67,23 +82,18 @@ export function MayaProvider({ children, initialEngine = "AI assistant" }: { chi
   }, [open]);
 
   const floatingLayer = <>
-    {enabled && !open && !floatingHidden ? <motion.button
+    {enabled && !open && !floatingHidden ? <button
       type="button"
-      drag
-      dragMomentum={false}
-      dragElastic={0.06}
-      dragConstraints={{ left: -290, right: 0, top: -180, bottom: 180 }}
-      whileDrag={{ scale: 1.06 }}
       onClick={(event) => {
         event.stopPropagation();
         openMaya();
       }}
-      className={`fixed right-4 z-[60] grid size-14 cursor-grab touch-none place-items-center rounded-full border border-crimson/20 bg-gradient-to-br from-[#fff7f5] to-[#ffe5e9] text-wine shadow-[0_14px_36px_rgba(143,24,55,.26)] outline-none ring-offset-2 ring-offset-background transition duration-150 active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-crimson dark:from-[#31171f] dark:to-[#211318] dark:text-[#ff9aac] md:right-[calc((100vw-430px)/2+16px)] ${triggerPosition}`}
+      className={`fixed right-4 z-[60] grid size-14 touch-manipulation place-items-center rounded-full border border-crimson/20 bg-gradient-to-br from-[#fff7f5] to-[#ffe5e9] text-wine shadow-[0_14px_36px_rgba(143,24,55,.26)] outline-none ring-offset-2 ring-offset-background transition-[transform,box-shadow] duration-100 active:scale-95 focus-visible:ring-2 focus-visible:ring-crimson dark:from-[#31171f] dark:to-[#211318] dark:text-[#ff9aac] md:right-[calc((100vw-430px)/2+16px)] ${triggerPosition}`}
       aria-label="Open Maya AI assistant"
     >
       <Sparkles size={22}/>
       <span className="absolute -right-1 -top-1 rounded-full bg-ink px-1.5 py-0.5 text-[8px] font-bold text-ivory">AI</span>
-    </motion.button> : null}
+    </button> : null}
     <AnimatePresence>{open ? <MayaSheet initialContext={seed} engine={engine} onClose={closeMaya}/> : null}</AnimatePresence>
   </>;
 
@@ -149,8 +159,8 @@ function MayaSheet({ initialContext, engine, onClose }: { initialContext: MayaOp
     setNotice("Thanks—your feedback helps improve Maya.");
   };
 
-  return <motion.div className="fixed inset-0 z-[80] bg-black/48 backdrop-blur-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>
-    <motion.section role="dialog" aria-modal="true" aria-labelledby="maya-title" onClick={(event) => event.stopPropagation()} initial={reduced ? { opacity: 0 } : { y: "100%" }} animate={reduced ? { opacity: 1 } : { y: 0 }} exit={reduced ? { opacity: 0 } : { y: "100%" }} transition={{ type: "spring", stiffness: 320, damping: 34 }} className="fixed inset-x-0 bottom-0 mx-auto flex max-h-[88dvh] min-h-[520px] w-full max-w-[430px] flex-col overflow-hidden rounded-t-[28px] bg-background shadow-2xl md:bottom-[max(24px,calc((100dvh-820px)/2))] md:max-h-[760px] md:rounded-[28px]">
+  return <motion.div className="fixed inset-0 z-[80] bg-black/48 backdrop-blur-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: reduced ? 0 : 0.12 }} onClick={onClose}>
+    <motion.section role="dialog" aria-modal="true" aria-labelledby="maya-title" onClick={(event) => event.stopPropagation()} initial={reduced ? { opacity: 0 } : { y: 24, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={reduced ? { opacity: 0 } : { y: 16, opacity: 0 }} transition={{ duration: reduced ? 0 : 0.16, ease: "easeOut" }} className="fixed inset-x-0 bottom-0 mx-auto flex max-h-[88dvh] min-h-[520px] w-full max-w-[430px] flex-col overflow-hidden rounded-t-[28px] bg-background shadow-2xl will-change-transform md:bottom-[max(24px,calc((100dvh-820px)/2))] md:max-h-[760px] md:rounded-[28px]">
       <div className="mx-auto mt-3 h-1.5 w-12 rounded-full bg-foreground/15"/>
       <header className="flex items-center gap-3 border-b px-5 pb-4 pt-3"><button type="button" onClick={() => mode && !initialContext.mode ? setMode(null) : onClose()} className="grid size-11 place-items-center rounded-full border" aria-label={mode && !initialContext.mode ? "Back to Maya actions" : "Close Maya"}>{mode && !initialContext.mode ? <ArrowLeft size={18}/> : <X size={18}/>}</button><span className="grid size-11 place-items-center rounded-[16px] bg-gradient-to-br from-crimson/15 to-wine/10 text-crimson"><Sparkles size={20}/></span><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><h2 id="maya-title" className="text-lg font-semibold">Maya</h2><span className="rounded-full bg-crimson/10 px-2 py-0.5 text-[9px] font-bold tracking-[.12em] text-crimson">AI</span></div><p className="text-xs text-stone">{engine === "Google Gemini" ? "Powered by Google Gemini" : "Private AI guidance inside Bhetau"}</p></div></header>
       <div className="hide-scrollbar flex-1 overflow-y-auto px-5 py-5">

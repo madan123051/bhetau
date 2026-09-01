@@ -3,6 +3,7 @@ import { hasSupabaseEnv } from "@/lib/supabase/config";
 import { getCurrentProductSession } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import type { CurrentUserProfile } from "@/types/domain";
+import { PROFILE_PHOTO_BUCKET } from "@/lib/profile-photo";
 
 function ageFromBirthDate(value: string | null) {
   if (!value) return null;
@@ -30,9 +31,15 @@ export default async function YouPage() {
 
   const { supabase, claims, userId, account } = await getCurrentProductSession();
   if (!supabase || !userId) redirect("/auth");
-  const profileResult = await supabase.from("profiles").select("first_name, current_area, gender, relationship_intention, languages, bio, prompt_answers, show_age, show_city, show_active_status, read_receipts, discovery_paused, incognito").eq("user_id", userId).single();
+  const [profileResult, photoResult] = await Promise.all([
+    supabase.from("profiles").select("first_name, current_area, gender, relationship_intention, languages, bio, prompt_answers, show_age, show_city, show_active_status, read_receipts, discovery_paused, incognito").eq("user_id", userId).single(),
+    supabase.from("profile_photos").select("storage_path").eq("user_id", userId).eq("position", 1).maybeSingle(),
+  ]);
   const profile = profileResult.data;
   if (!profile) redirect("/setup?recovery=profile");
+  const signedPhoto = photoResult.data?.storage_path
+    ? await supabase.storage.from(PROFILE_PHOTO_BUCKET).createSignedUrl(photoResult.data.storage_path, 60 * 60)
+    : null;
   const completed = [profile.first_name, profile.gender, profile.relationship_intention, profile.current_area, profile.languages?.length, profile.bio, Array.isArray(profile.prompt_answers) && profile.prompt_answers.length].filter(Boolean).length;
   const contact = typeof claims?.phone === "string" && claims.phone ? claims.phone : typeof claims?.email === "string" ? claims.email : "";
 
@@ -44,6 +51,7 @@ export default async function YouPage() {
     verified: account?.verification === "verified" || account?.verification === "phone_verified",
     completion: Math.round((completed / 7) * 100),
     contact,
+    thumbnailUrl: signedPhoto?.data?.signedUrl ?? null,
     settings: {
       age: profile.show_age,
       city: profile.show_city,

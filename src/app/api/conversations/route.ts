@@ -3,6 +3,10 @@ import { conversationSettingsSchema } from "@/lib/validation/schemas";
 import { getUserScopedServerClient } from "@/lib/supabase/server";
 import { checkPrototypeRateLimit } from "@/lib/rate-limit";
 
+function isMissingConversationFunction(error: { code?: string; message?: string } | null) {
+  return ["42883", "PGRST202"].includes(error?.code ?? "") || /does not exist|schema cache/i.test(error?.message ?? "");
+}
+
 export async function PATCH(request: Request) {
   const key = request.headers.get("x-forwarded-for") ?? "local";
   if (!checkPrototypeRateLimit(`conversation-action:${key}`, 30, 60_000).allowed) return NextResponse.json({ error: "Too many conversation changes. Try again shortly." }, { status: 429 });
@@ -16,10 +20,22 @@ export async function PATCH(request: Request) {
 
   if (payload.data.action === "archive") {
     const { data, error } = await supabase.rpc("archive_my_conversation", { p_conversation_id: payload.data.conversationId });
+    if (error && isMissingConversationFunction(error)) {
+      const fallback = await supabase.from("conversation_participants").update({ archived_at: new Date().toISOString() }).eq("conversation_id", payload.data.conversationId).eq("user_id", userId).select("conversation_id").maybeSingle();
+      if (fallback.error) return NextResponse.json({ error: fallback.error.message }, { status: 400 });
+      if (!fallback.data) return NextResponse.json({ error: "Conversation not found or cannot be changed." }, { status: 404 });
+      return NextResponse.json({ updated: true });
+    }
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     if (!data) return NextResponse.json({ error: "Conversation not found or cannot be changed." }, { status: 404 });
   } else if (payload.data.action === "read") {
     const { data, error } = await supabase.rpc("mark_conversation_read", { p_conversation_id: payload.data.conversationId, p_message_id: payload.data.messageId });
+    if (error && isMissingConversationFunction(error)) {
+      const fallback = await supabase.from("conversation_participants").update({ last_read_at: new Date().toISOString() }).eq("conversation_id", payload.data.conversationId).eq("user_id", userId).select("conversation_id").maybeSingle();
+      if (fallback.error) return NextResponse.json({ error: fallback.error.message }, { status: 400 });
+      if (!fallback.data) return NextResponse.json({ error: "Conversation or message not found." }, { status: 404 });
+      return NextResponse.json({ updated: true });
+    }
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     if (!data) return NextResponse.json({ error: "Conversation or message not found." }, { status: 404 });
   } else {

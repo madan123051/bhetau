@@ -150,7 +150,7 @@ export class GoogleGeminiProvider implements AIProvider {
   readonly name = "google-gemini";
 
   async generateStructured(input: MayaProviderInput) {
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = process.env.GEMINI_API_KEY?.trim();
     if (!apiKey) throw new MayaProviderError("configuration", false);
 
     const signal = AbortSignal.timeout(configuredTimeoutMs());
@@ -281,6 +281,6 @@ export function getMayaProvider(): AIProvider {
 }
 
 export function isGeminiEnabled() {
-  return Boolean(process.env.GEMINI_API_KEY);
+  return Boolean(process.env.GEMINI_API_KEY?.trim());
 }
 

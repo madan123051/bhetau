@@ -117,7 +117,7 @@ export function ChatsList({
               </div>
               <div className="hide-scrollbar mt-3 flex gap-4 overflow-x-auto px-5 pb-2">
                 {recentMatches.map((item) => (
-                  <Link key={item.id} href={`/chats/${item.id}`} className="w-16 shrink-0 text-center" aria-label={`Open chat with ${item.firstName}`}>
+                  <Link key={item.id} href={`/chats/${item.id}`} prefetch={false} className="w-16 shrink-0 text-center" aria-label={`Open chat with ${item.firstName}`}>
                     <div className="relative">
                       <Avatar item={item} size="small"/>
                       {item.unread > 0 && <span className="absolute bottom-0 right-0 size-4 rounded-full border-[3px] border-background bg-crimson"><span className="sr-only">New message</span></span>}
@@ -166,7 +166,7 @@ export function ChatsList({
                         }}
                         className="relative z-10 touch-pan-y bg-background"
                       >
-                        <Link href={`/chats/${item.id}`} className="flex min-h-[86px] items-center gap-3 rounded-2xl px-2 transition hover:bg-foreground/4" aria-label={`Open chat with ${item.firstName}`}>
+                        <Link href={`/chats/${item.id}`} prefetch={false} className="flex min-h-[86px] items-center gap-3 rounded-2xl px-2 transition hover:bg-foreground/4" aria-label={`Open chat with ${item.firstName}`}>
                           <Avatar item={item}/>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center justify-between gap-2">

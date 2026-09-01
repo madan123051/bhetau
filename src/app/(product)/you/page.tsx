@@ -30,14 +30,10 @@ export default async function YouPage() {
 
   const { supabase, claims, userId, account } = await getCurrentProductSession();
   if (!supabase || !userId) redirect("/auth");
-  const [profileResult, interestsResult, photosResult] = await Promise.all([
-    supabase!.from("profiles").select("first_name, current_area, gender, relationship_intention, languages, bio, prompt_answers, show_age, show_city, show_active_status, read_receipts, discovery_paused, incognito").eq("user_id", userId).single(),
-    supabase!.from("user_interests").select("interest_id").eq("user_id", userId),
-    supabase!.from("profile_photos").select("id").eq("user_id", userId),
-  ]);
+  const profileResult = await supabase.from("profiles").select("first_name, current_area, gender, relationship_intention, languages, bio, prompt_answers, show_age, show_city, show_active_status, read_receipts, discovery_paused, incognito").eq("user_id", userId).single();
   const profile = profileResult.data;
   if (!profile) redirect("/setup?recovery=profile");
-  const completed = [profile.first_name, profile.gender, profile.relationship_intention, profile.current_area, profile.languages?.length, profile.bio, Array.isArray(profile.prompt_answers) && profile.prompt_answers.length, interestsResult.data?.length, photosResult.data?.length].filter(Boolean).length;
+  const completed = [profile.first_name, profile.gender, profile.relationship_intention, profile.current_area, profile.languages?.length, profile.bio, Array.isArray(profile.prompt_answers) && profile.prompt_answers.length].filter(Boolean).length;
   const contact = typeof claims?.phone === "string" && claims.phone ? claims.phone : typeof claims?.email === "string" ? claims.email : "";
 
   return <SettingsExperience profile={{
@@ -46,7 +42,7 @@ export default async function YouPage() {
     age: ageFromBirthDate(account?.birth_date ?? null),
     city: profile.current_area,
     verified: account?.verification === "verified" || account?.verification === "phone_verified",
-    completion: Math.round((completed / 9) * 100),
+    completion: Math.round((completed / 7) * 100),
     contact,
     settings: {
       age: profile.show_age,

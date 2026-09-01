@@ -3,7 +3,7 @@
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { usePathname } from "next/navigation";
 import { AlertTriangle, ArrowLeft, Check, ChevronRight, Languages, MessageCircleReply, RefreshCw, ShieldCheck, Sparkles, ThumbsDown, ThumbsUp, UserRoundPen, X } from "lucide-react";
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { MayaContextMessage, MayaOpenContext } from "./types";
 import type { MayaMode, MayaRequest, MayaResponse } from "@/lib/maya/schemas";
@@ -20,33 +20,37 @@ const actions: Array<{ mode: MayaMode; action: string; label: string; detail: st
   { mode: "bhetau_help", action: "product_help", label: "How does Bhetau work?", detail: "Answers from Bhetau help", icon: ChevronRight },
 ];
 
-export function MayaProvider({ children }: { children: React.ReactNode }) {
+export function MayaProvider({ children, initialEngine = "AI assistant" }: { children: React.ReactNode; initialEngine?: string }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [seed, setSeed] = useState<MayaOpenContext>({});
   const [enabled, setEnabled] = useState(true);
-  const [engine, setEngine] = useState("AI assistant");
+  const [engine, setEngine] = useState(initialEngine);
   const [floatingHidden, setFloatingHidden] = useState(false);
+  const preferencesLoaded = useRef(false);
   useEffect(() => {
-    const controller = new AbortController();
-    fetch("/api/maya/preferences", { signal: controller.signal })
+    const onPreference = (event: Event) => setEnabled((event as CustomEvent<{ enabled: boolean }>).detail.enabled);
+    const onFloatingVisibility = (event: Event) => setFloatingHidden(Boolean((event as CustomEvent<{ hidden?: boolean }>).detail?.hidden));
+    window.addEventListener("bhetau:maya-enabled", onPreference);
+    window.addEventListener("bhetau:maya-floating-visibility", onFloatingVisibility);
+    return () => {
+      window.removeEventListener("bhetau:maya-enabled", onPreference);
+      window.removeEventListener("bhetau:maya-floating-visibility", onFloatingVisibility);
+    };
+  }, []);
+  const openMaya = useCallback((context: MayaOpenContext = {}) => {
+    setSeed(context);
+    setOpen(true);
+    if (preferencesLoaded.current) return;
+    preferencesLoaded.current = true;
+    void fetch("/api/maya/preferences")
       .then((response) => response.ok ? response.json() : null)
       .then((body) => {
         if (typeof body?.preferences?.enabled === "boolean") setEnabled(body.preferences.enabled);
         if (typeof body?.engine === "string") setEngine(body.engine);
       })
       .catch(() => undefined);
-    const onPreference = (event: Event) => setEnabled((event as CustomEvent<{ enabled: boolean }>).detail.enabled);
-    const onFloatingVisibility = (event: Event) => setFloatingHidden(Boolean((event as CustomEvent<{ hidden?: boolean }>).detail?.hidden));
-    window.addEventListener("bhetau:maya-enabled", onPreference);
-    window.addEventListener("bhetau:maya-floating-visibility", onFloatingVisibility);
-    return () => {
-      controller.abort();
-      window.removeEventListener("bhetau:maya-enabled", onPreference);
-      window.removeEventListener("bhetau:maya-floating-visibility", onFloatingVisibility);
-    };
   }, []);
-  const openMaya = useCallback((context: MayaOpenContext = {}) => { setSeed(context); setOpen(true); }, []);
   const closeMaya = useCallback(() => setOpen(false), []);
   const value = useMemo(() => ({ openMaya, closeMaya }), [closeMaya, openMaya]);
   const isChatDetail = /^\/chats\/[^/]+$/.test(pathname);
@@ -63,18 +67,23 @@ export function MayaProvider({ children }: { children: React.ReactNode }) {
   }, [open]);
 
   const floatingLayer = <>
-    {enabled && !open && !floatingHidden ? <button
+    {enabled && !open && !floatingHidden ? <motion.button
       type="button"
+      drag
+      dragMomentum={false}
+      dragElastic={0.06}
+      dragConstraints={{ left: -290, right: 0, top: -180, bottom: 180 }}
+      whileDrag={{ scale: 1.06 }}
       onClick={(event) => {
         event.stopPropagation();
         openMaya();
       }}
-      className={`fixed right-4 z-[60] grid size-14 place-items-center rounded-full border border-crimson/20 bg-gradient-to-br from-[#fff7f5] to-[#ffe5e9] text-wine shadow-[0_14px_36px_rgba(143,24,55,.26)] outline-none ring-offset-2 ring-offset-background transition duration-150 active:scale-95 focus-visible:ring-2 focus-visible:ring-crimson dark:from-[#31171f] dark:to-[#211318] dark:text-[#ff9aac] md:right-[calc((100vw-430px)/2+16px)] ${triggerPosition}`}
+      className={`fixed right-4 z-[60] grid size-14 cursor-grab touch-none place-items-center rounded-full border border-crimson/20 bg-gradient-to-br from-[#fff7f5] to-[#ffe5e9] text-wine shadow-[0_14px_36px_rgba(143,24,55,.26)] outline-none ring-offset-2 ring-offset-background transition duration-150 active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-crimson dark:from-[#31171f] dark:to-[#211318] dark:text-[#ff9aac] md:right-[calc((100vw-430px)/2+16px)] ${triggerPosition}`}
       aria-label="Open Maya AI assistant"
     >
       <Sparkles size={22}/>
       <span className="absolute -right-1 -top-1 rounded-full bg-ink px-1.5 py-0.5 text-[8px] font-bold text-ivory">AI</span>
-    </button> : null}
+    </motion.button> : null}
     <AnimatePresence>{open ? <MayaSheet initialContext={seed} engine={engine} onClose={closeMaya}/> : null}</AnimatePresence>
   </>;
 

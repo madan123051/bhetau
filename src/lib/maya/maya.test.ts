@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { classifyGeminiHttpFailure, getMayaProvider, GoogleGeminiProvider, parseGeminiStructuredResponse, type AIProvider, type MayaProviderInput, type MayaProviderResult } from "./provider";
 import { findBhetauHelp } from "./knowledge";
 import { buildMayaUserPayload, MAYA_SYSTEM_POLICY } from "./policy";
-import { classifyMayaRoute, routeMayaRequest } from "./router";
+import { classifyMayaRoute, getModelForRoute, routeMayaRequest } from "./router";
 import { mayaRequestSchema, mayaResponseSchema, type MayaRequest, type MayaResponse } from "./schemas";
 import { detectSafetySignals } from "./safety";
 import { checkMayaQuota, processMayaRequest, type MayaActor } from "./service";
@@ -55,6 +55,12 @@ describe("Maya schemas and privacy boundaries", () => {
 });
 
 describe("Maya routing", () => {
+  it("uses the supported Gemini alias and trims configured values", () => {
+    expect(getModelForRoute("fast")).toBe("gemini-flash-latest");
+    vi.stubEnv("GEMINI_MODEL", "  gemini-3.5-flash  ");
+    expect(getModelForRoute("smart")).toBe("gemini-3.5-flash");
+  });
+
   it("routes translation to the fast translation method", async () => {
     const provider = new FakeProvider();
     const result = await routeMayaRequest({ ...baseRequest, mode: "translation", action: "translate", targetLanguage: "ne" }, provider);

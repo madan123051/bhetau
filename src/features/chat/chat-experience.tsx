@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
   ArrowLeft,
   Ban,
@@ -116,6 +116,7 @@ export function ChatExperience({
   const [confirmUnsendId, setConfirmUnsendId] = useState<string | null>(null);
   const [pendingMessageId, setPendingMessageId] = useState<string | null>(null);
   const [swipeOpenId, setSwipeOpenId] = useState<string | null>(null);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [clock, setClock] = useState<number | null>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const messageEndRef = useRef<HTMLDivElement>(null);
@@ -123,7 +124,7 @@ export function ChatExperience({
   const visibleMessages = clock === null
     ? messages
     : messages.filter((message) => !message.expiresAt || new Date(message.expiresAt).getTime() > clock);
-  const floatingMayaWouldObstruct = Boolean(selectedMessageId || timerMenu || menu || replyingTo || editingMessage);
+  const floatingMayaWouldObstruct = Boolean(selectedMessageId || timerMenu || menu || replyingTo || editingMessage || profileOpen);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => setClock(Date.now()), 0);
@@ -391,11 +392,13 @@ export function ChatExperience({
         <Link href="/chats" aria-label="Back to chats" className="grid size-11 shrink-0 place-items-center rounded-full">
           <ArrowLeft size={20}/>
         </Link>
-        <Portrait quadrant={profile.portrait} initials={profile.firstName} alt={profile.portrait ? `Fictional portrait of ${profile.firstName}` : `${profile.firstName}'s profile placeholder`} className="size-11 shrink-0 rounded-full"/>
-        <div className="min-w-0 flex-1">
-          <p className="truncate font-semibold">{profile.firstName} {profile.verified ? <span className="text-success">✓</span> : null}</p>
-          <p className="truncate text-xs text-stone">Matched recently · {profile.city}</p>
-        </div>
+        <button type="button" onClick={() => setProfileOpen(true)} className="flex min-w-0 flex-1 items-center gap-2 rounded-2xl text-left" aria-label={`Open ${profile.firstName}'s profile`}>
+          <Portrait quadrant={profile.portrait} initials={profile.firstName} alt={profile.portrait ? `Fictional portrait of ${profile.firstName}` : `${profile.firstName}'s profile placeholder`} className="size-11 shrink-0 rounded-full"/>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate font-semibold">{profile.firstName} {profile.verified ? <span className="text-success">✓</span> : null}</span>
+            <span className="block truncate text-xs text-stone">View profile · {profile.city}</span>
+          </span>
+        </button>
         <button
           type="button"
           onClick={() => { setTimerMenu((open) => !open); setMenu(false); }}
@@ -582,8 +585,43 @@ export function ChatExperience({
           </Button>
         </div>
       </form>
+      <AnimatePresence>{profileOpen ? <ChatProfileSheet profile={profile} onClose={() => setProfileOpen(false)}/> : null}</AnimatePresence>
     </div>
   );
+}
+
+function ChatProfileSheet({ profile, onClose }: { profile: Profile; onClose: () => void }) {
+  const reducedMotion = useReducedMotion();
+  return <motion.div className="fixed inset-0 z-[75] bg-black/45 backdrop-blur-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>
+    <motion.section
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="chat-profile-name"
+      onClick={(event) => event.stopPropagation()}
+      initial={reducedMotion ? { opacity: 0 } : { y: "100%" }}
+      animate={reducedMotion ? { opacity: 1 } : { y: 0 }}
+      exit={reducedMotion ? { opacity: 0 } : { y: "100%" }}
+      transition={{ type: "spring", stiffness: 340, damping: 34 }}
+      className="fixed inset-x-0 bottom-0 mx-auto max-h-[86dvh] w-full max-w-[430px] overflow-y-auto rounded-t-[28px] bg-background px-5 pb-[max(24px,env(safe-area-inset-bottom))] pt-3 shadow-2xl md:bottom-[max(24px,calc((100dvh-820px)/2))] md:max-h-[760px] md:rounded-[28px]"
+    >
+      <div className="mx-auto h-1.5 w-12 rounded-full bg-foreground/15"/>
+      <div className="mt-4 flex items-start gap-4">
+        <Portrait quadrant={profile.portrait} initials={profile.firstName} alt={`${profile.firstName}'s profile`} className="size-20 shrink-0 rounded-[24px]"/>
+        <div className="min-w-0 flex-1 pt-1">
+          <h2 id="chat-profile-name" className="truncate text-2xl font-semibold">{profile.firstName}{profile.age ? `, ${profile.age}` : ""} {profile.verified ? <span className="text-success">✓</span> : null}</h2>
+          <p className="mt-1 text-sm text-stone">{profile.city}</p>
+          <p className="mt-2 inline-flex rounded-full bg-crimson/10 px-3 py-1 text-xs font-semibold text-crimson">{profile.intent}</p>
+        </div>
+        <button type="button" onClick={onClose} className="grid size-11 shrink-0 place-items-center rounded-full border" aria-label="Close profile"><X size={18}/></button>
+      </div>
+      <p className="mt-6 text-sm leading-6 text-stone">{profile.bio}</p>
+      {profile.occupation || profile.from ? <div className="mt-5 grid grid-cols-2 gap-2 text-xs"><div className="rounded-2xl border bg-surface p-3"><p className="text-stone">From</p><p className="mt-1 font-semibold">{profile.from || "Not shared"}</p></div><div className="rounded-2xl border bg-surface p-3"><p className="text-stone">Work / study</p><p className="mt-1 font-semibold">{profile.occupation || "Not shared"}</p></div></div> : null}
+      {profile.interests.length ? <div className="mt-5"><p className="text-[10px] font-bold uppercase tracking-[.13em] text-stone">Interests</p><div className="mt-2 flex flex-wrap gap-2">{profile.interests.map((interest) => <span key={interest} className="rounded-full border bg-surface px-3 py-2 text-xs font-medium">{interest}</span>)}</div></div> : null}
+      {profile.languages.length ? <p className="mt-5 text-xs text-stone"><span className="font-semibold text-foreground">Languages:</span> {profile.languages.join(" · ")}</p> : null}
+      <div className="mt-6 rounded-[22px] bg-[#fff1ed] p-4 dark:bg-[#24171b]"><p className="text-[10px] font-bold uppercase tracking-[.12em] text-crimson">{profile.prompt}</p><p className="mt-2 text-sm leading-6">{profile.answer}</p></div>
+      <Button onClick={onClose} className="mt-6 w-full">Back to chat</Button>
+    </motion.section>
+  </motion.div>;
 }
 
 type SwipeableMessageProps = {

@@ -14,9 +14,12 @@ export function classifyMayaRoute(mode: MayaMode): MayaModelRoute {
 }
 
 export function getModelForRoute(route: Exclude<MayaModelRoute, "knowledge">) {
-  if (route === "smart") return process.env.GEMINI_SMART_MODEL ?? process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
-  if (route === "safety") return process.env.GEMINI_SAFETY_MODEL ?? process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
-  return process.env.GEMINI_FAST_MODEL ?? process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
+  const configured = route === "smart"
+    ? process.env.GEMINI_SMART_MODEL ?? process.env.GEMINI_MODEL
+    : route === "safety"
+      ? process.env.GEMINI_SAFETY_MODEL ?? process.env.GEMINI_MODEL
+      : process.env.GEMINI_FAST_MODEL ?? process.env.GEMINI_MODEL;
+  return configured?.trim() || "gemini-flash-latest";
 }
 
 export async function routeMayaRequest(request: MayaRequest, provider: AIProvider): Promise<MayaProviderResult> {

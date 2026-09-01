@@ -26,7 +26,6 @@ export function MayaProvider({ children, initialEngine = "AI assistant" }: { chi
   const [seed, setSeed] = useState<MayaOpenContext>({});
   const [enabled, setEnabled] = useState(true);
   const [engine, setEngine] = useState(initialEngine);
-  const [floatingHidden, setFloatingHidden] = useState(false);
   const preferencesLoaded = useRef(false);
   const loadPreferences = useCallback(() => {
     if (preferencesLoaded.current) return;
@@ -41,12 +40,9 @@ export function MayaProvider({ children, initialEngine = "AI assistant" }: { chi
   }, []);
   useEffect(() => {
     const onPreference = (event: Event) => setEnabled((event as CustomEvent<{ enabled: boolean }>).detail.enabled);
-    const onFloatingVisibility = (event: Event) => setFloatingHidden(Boolean((event as CustomEvent<{ hidden?: boolean }>).detail?.hidden));
     window.addEventListener("bhetau:maya-enabled", onPreference);
-    window.addEventListener("bhetau:maya-floating-visibility", onFloatingVisibility);
     return () => {
       window.removeEventListener("bhetau:maya-enabled", onPreference);
-      window.removeEventListener("bhetau:maya-floating-visibility", onFloatingVisibility);
     };
   }, []);
   useEffect(() => {
@@ -82,7 +78,7 @@ export function MayaProvider({ children, initialEngine = "AI assistant" }: { chi
   }, [open]);
 
   const floatingLayer = <>
-    {enabled && !open && !floatingHidden ? <button
+    {enabled && !open ? <button
       type="button"
       onClick={(event) => {
         event.stopPropagation();

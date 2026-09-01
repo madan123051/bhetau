@@ -118,8 +118,6 @@ export function ChatExperience({
   const visibleMessages = clock === null
     ? messages
     : messages.filter((message) => !message.expiresAt || new Date(message.expiresAt).getTime() > clock);
-  const floatingMayaWouldObstruct = Boolean(selectedMessageId || timerMenu || menu || replyingTo || editingMessage || profileOpen);
-
   useEffect(() => {
     const timeout = window.setTimeout(() => setClock(Date.now()), 0);
     const interval = window.setInterval(() => setClock(Date.now()), 60_000);
@@ -144,14 +142,6 @@ export function ChatExperience({
     });
     return () => controller.abort();
   }, [conversationId, demoMode, initialReadMessageId]);
-
-  useEffect(() => {
-    window.dispatchEvent(new CustomEvent("bhetau:maya-floating-visibility", { detail: { hidden: floatingMayaWouldObstruct } }));
-  }, [floatingMayaWouldObstruct]);
-
-  useEffect(() => () => {
-    window.dispatchEvent(new CustomEvent("bhetau:maya-floating-visibility", { detail: { hidden: false } }));
-  }, []);
 
   const focusComposer = () => window.setTimeout(() => composerRef.current?.focus(), 0);
 
@@ -382,7 +372,7 @@ export function ChatExperience({
 
   return (
     <div className="flex h-[calc(100dvh-var(--product-nav-height))] min-h-0 flex-col overflow-hidden md:h-[calc(820px-var(--product-nav-height))]">
-      <header className="relative flex min-h-[76px] items-center gap-2 border-b bg-surface/85 px-3 pt-[max(8px,env(safe-area-inset-top))] backdrop-blur">
+      <header className="relative z-50 flex min-h-[76px] items-center gap-2 border-b bg-surface/85 px-3 pt-[max(8px,env(safe-area-inset-top))] backdrop-blur">
         <Link href="/chats" aria-label="Back to chats" className="grid size-11 shrink-0 place-items-center rounded-full">
           <ArrowLeft size={20}/>
         </Link>

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { Archive, ArrowUpRight, CheckCircle2, MessageCircle, RefreshCw } from "lucide-react";
+import { Archive, ArrowUpRight, CheckCircle2, MessageCircle, RefreshCw, X } from "lucide-react";
 import { Portrait } from "@/components/profile/portrait";
 import type { PortraitQuadrant } from "@/types/domain";
 
@@ -45,6 +45,8 @@ export function ChatsList({
   const [items, setItems] = useState(initialItems);
   const [pending, setPending] = useState<Set<string>>(() => new Set());
   const [status, setStatus] = useState("");
+  const [revealedId, setRevealedId] = useState<string | null>(null);
+  const [removeCandidate, setRemoveCandidate] = useState<ChatListItem | null>(null);
   const reducedMotion = useReducedMotion();
   const recentMatches = [...items]
     .sort((a, b) => new Date(b.matchedAt).getTime() - new Date(a.matchedAt).getTime())
@@ -58,7 +60,9 @@ export function ChatsList({
 
     setPending((current) => new Set(current).add(conversationId));
     setItems((current) => current.filter((entry) => entry.id !== conversationId));
-    setStatus("Conversation removed from Chats.");
+    setRevealedId(null);
+    setRemoveCandidate(null);
+    setStatus("Chat hidden. Your match and messages are still safe.");
 
     const result = await fetch("/api/conversations", {
       method: "PATCH",
@@ -117,7 +121,7 @@ export function ChatsList({
               </div>
               <div className="hide-scrollbar mt-3 flex gap-4 overflow-x-auto px-5 pb-2">
                 {recentMatches.map((item) => (
-                  <Link key={item.id} href={`/chats/${item.id}`} prefetch={false} className="w-16 shrink-0 text-center" aria-label={`Open chat with ${item.firstName}`}>
+                  <Link key={item.id} href={`/chats/${item.id}`} className="w-16 shrink-0 text-center" aria-label={`Open chat with ${item.firstName}`}>
                     <div className="relative">
                       <Avatar item={item} size="small"/>
                       {item.unread > 0 && <span className="absolute bottom-0 right-0 size-4 rounded-full border-[3px] border-background bg-crimson"><span className="sr-only">New message</span></span>}
@@ -133,7 +137,7 @@ export function ChatsList({
             <section className="mt-7 px-3">
               <div className="flex items-end justify-between px-2">
                 <h2 className="text-sm font-semibold">Messages</h2>
-                <span className="text-[11px] text-stone">Swipe left to remove</span>
+                <span className="text-[11px] text-stone">Swipe left for options</span>
               </div>
               <div className="mt-2 space-y-1 overflow-hidden">
                 <AnimatePresence initial={false}>
@@ -148,25 +152,26 @@ export function ChatsList({
                     >
                       <button
                         type="button"
-                        onClick={() => archive(item.id)}
+                        onClick={() => setRemoveCandidate(item)}
                         disabled={pending.has(item.id)}
-                        aria-label={`Remove conversation with ${item.firstName}`}
+                        aria-label={`Review removal of conversation with ${item.firstName}`}
                         className="absolute inset-y-0 right-0 z-0 flex w-24 flex-col items-center justify-center gap-1 bg-wine text-[11px] font-semibold text-white disabled:opacity-60 focus-visible:z-20"
                       >
                         <Archive size={19}/>
-                        Remove
+                        Hide
                       </button>
                       <motion.div
                         drag="x"
                         dragConstraints={{ left: -96, right: 0 }}
                         dragElastic={0.08}
                         dragMomentum={false}
+                        animate={{ x: revealedId === item.id ? -96 : 0 }}
                         onDragEnd={(_, info) => {
-                          if (info.offset.x < -70 || info.velocity.x < -500) archive(item.id);
+                          setRevealedId(info.offset.x < -48 || info.velocity.x < -450 ? item.id : null);
                         }}
                         className="relative z-10 touch-pan-y bg-background"
                       >
-                        <Link href={`/chats/${item.id}`} prefetch={false} className="flex min-h-[86px] items-center gap-3 rounded-2xl px-2 transition hover:bg-foreground/4" aria-label={`Open chat with ${item.firstName}`}>
+                        <Link href={`/chats/${item.id}`} className="flex min-h-[86px] items-center gap-3 rounded-2xl px-2 transition hover:bg-foreground/4" aria-label={`Open chat with ${item.firstName}`}>
                           <Avatar item={item}/>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center justify-between gap-2">
@@ -200,6 +205,39 @@ export function ChatsList({
       )}
 
       <AnimatePresence>
+        {removeCandidate ? (
+          <motion.div
+            className="fixed inset-0 z-[70] flex items-end justify-center bg-black/45 px-3 pb-[max(16px,env(safe-area-inset-bottom))] backdrop-blur-sm md:absolute"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setRemoveCandidate(null)}
+          >
+            <motion.section
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="hide-chat-title"
+              initial={reducedMotion ? { opacity: 0 } : { y: 32, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={reducedMotion ? { opacity: 0 } : { y: 32, opacity: 0 }}
+              onClick={(event) => event.stopPropagation()}
+              className="w-full max-w-[404px] rounded-[28px] border bg-surface p-5 shadow-2xl"
+            >
+              <div className="flex items-start gap-3">
+                <div className="grid size-11 shrink-0 place-items-center rounded-2xl bg-crimson/10 text-crimson"><Archive size={19}/></div>
+                <div className="min-w-0 flex-1">
+                  <h2 id="hide-chat-title" className="text-lg font-semibold">Hide chat with {removeCandidate.firstName}?</h2>
+                  <p className="mt-1 text-sm leading-6 text-stone">This only removes the conversation from your Chats list. You stay matched, and existing messages remain saved.</p>
+                </div>
+                <button type="button" onClick={() => setRemoveCandidate(null)} className="grid size-11 shrink-0 place-items-center rounded-full" aria-label="Cancel hiding chat"><X size={18}/></button>
+              </div>
+              <div className="mt-5 grid grid-cols-2 gap-2">
+                <button type="button" onClick={() => setRemoveCandidate(null)} className="min-h-12 rounded-2xl border text-sm font-semibold">Keep chat</button>
+                <button type="button" onClick={() => void archive(removeCandidate.id)} disabled={pending.has(removeCandidate.id)} className="min-h-12 rounded-2xl bg-crimson text-sm font-semibold text-white disabled:opacity-50">Hide chat</button>
+              </div>
+            </motion.section>
+          </motion.div>
+        ) : null}
         {status && (
           <motion.div role="status" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="fixed bottom-28 left-1/2 z-50 -translate-x-1/2 whitespace-nowrap rounded-full bg-foreground px-4 py-2 text-xs font-semibold text-background shadow-xl md:absolute">
             {status}

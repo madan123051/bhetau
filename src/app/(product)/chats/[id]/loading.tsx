@@ -1,5 +1,5 @@
 export default function ChatLoading() {
-  return <main className="flex h-[calc(100dvh-84px)] min-h-0 animate-pulse flex-col overflow-hidden md:h-[736px]" aria-label="Loading conversation">
+  return <main className="flex h-[calc(100dvh-var(--product-nav-height))] min-h-0 animate-pulse flex-col overflow-hidden md:h-[calc(820px-var(--product-nav-height))]" aria-label="Loading conversation">
     <div className="flex min-h-[76px] items-center gap-3 border-b px-4 pt-[max(8px,env(safe-area-inset-top))]">
       <div className="size-11 rounded-full bg-foreground/8"/>
       <div className="size-11 rounded-full bg-foreground/8"/>

@@ -387,7 +387,7 @@ export function ChatExperience({
   };
 
   return (
-    <div className="flex h-[calc(100dvh-84px)] min-h-0 flex-col overflow-hidden md:h-[736px]">
+    <div className="flex h-[calc(100dvh-var(--product-nav-height))] min-h-0 flex-col overflow-hidden md:h-[calc(820px-var(--product-nav-height))]">
       <header className="relative flex min-h-[76px] items-center gap-2 border-b bg-surface/85 px-3 pt-[max(8px,env(safe-area-inset-top))] backdrop-blur">
         <Link href="/chats" aria-label="Back to chats" className="grid size-11 shrink-0 place-items-center rounded-full">
           <ArrowLeft size={20}/>
@@ -550,7 +550,7 @@ export function ChatExperience({
         </div>
       </div>
 
-      <form onSubmit={send} className="shrink-0 border-t bg-surface px-3 pb-[max(12px,env(safe-area-inset-bottom))] pt-2">
+      <form onSubmit={send} className="shrink-0 border-t bg-surface px-3 pb-3 pt-2">
         {replyingTo || editingMessage ? (
           <div className="mb-2 flex items-center gap-2 rounded-2xl bg-foreground/5 px-3 py-2">
             <div className="min-w-0 flex-1 border-l-2 border-crimson pl-2">

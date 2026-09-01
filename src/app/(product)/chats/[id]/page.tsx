@@ -17,7 +17,13 @@ function promptAnswer(value: unknown) {
   };
 }
 
-type ConversationRow = { id: string; match_id: string; message_ttl_hours?: number | null };
+type MatchRow = { user_low: string; user_high: string; state: string };
+type ConversationRow = {
+  id: string;
+  match_id: string;
+  message_ttl_hours?: number | null;
+  matches?: MatchRow | MatchRow[] | null;
+};
 type MessageRow = {
   id: string;
   sender_id: string;
@@ -34,6 +40,11 @@ function reportChatFailure(stage: string, error: { code?: string; message?: stri
   console.error(JSON.stringify({ event: "chat_detail_query_failed", stage, code: error?.code, message: error?.message, details: error?.details, hint: error?.hint }));
 }
 
+function linkedMatch(conversation: ConversationRow | null) {
+  if (!conversation?.matches) return null;
+  return Array.isArray(conversation.matches) ? conversation.matches[0] ?? null : conversation.matches;
+}
+
 function ChatLoadError() {
   return <main className="grid min-h-[calc(100dvh-180px)] place-items-center px-6 text-center">
     <section role="alert" className="w-full rounded-[28px] border bg-surface p-7">
@@ -41,7 +52,7 @@ function ChatLoadError() {
       <h1 className="mt-5 text-xl font-semibold">This chat needs another try</h1>
       <p className="mt-2 text-sm leading-6 text-stone">Your match is still safe. We couldn’t load this conversation right now.</p>
       <div className="mt-6 flex justify-center gap-2">
-        <Link href="/chats" prefetch={false} className="inline-flex min-h-11 items-center gap-2 rounded-2xl border px-4 text-sm font-semibold"><ArrowLeft size={16}/>Chats</Link>
+        <Link href="/chats" className="inline-flex min-h-11 items-center gap-2 rounded-2xl border px-4 text-sm font-semibold"><ArrowLeft size={16}/>Chats</Link>
         <Link href="" className="inline-flex min-h-11 items-center gap-2 rounded-2xl bg-foreground px-4 text-sm font-semibold text-background"><RefreshCw size={16}/>Retry</Link>
       </div>
     </section>
@@ -59,16 +70,24 @@ export default async function ChatPage({ params }: { params: Promise<{ id: strin
   const { supabase, userId } = await getCurrentProductSession();
   if (!supabase || !userId) redirect(`/auth?next=${encodeURIComponent(`/chats/${id}`)}`);
 
-  const advancedConversationResult = await supabase.from("conversations").select("id, match_id, message_ttl_hours").eq("id", id).maybeSingle();
-  let conversation = advancedConversationResult.data as ConversationRow | null;
+  const advancedConversationResult = await supabase
+    .from("conversations")
+    .select("id, match_id, message_ttl_hours, matches!inner(user_low, user_high, state)")
+    .eq("id", id)
+    .maybeSingle();
+  let conversation = advancedConversationResult.data as unknown as ConversationRow | null;
   if (advancedConversationResult.error) {
     reportChatFailure("conversation_lifecycle", advancedConversationResult.error);
-    const baseConversationResult = await supabase.from("conversations").select("id, match_id").eq("id", id).maybeSingle();
+    const baseConversationResult = await supabase
+      .from("conversations")
+      .select("id, match_id, matches!inner(user_low, user_high, state)")
+      .eq("id", id)
+      .maybeSingle();
     if (baseConversationResult.error) {
       reportChatFailure("conversation_base", baseConversationResult.error);
       return <ChatLoadError/>;
     }
-    conversation = baseConversationResult.data as ConversationRow | null;
+    conversation = baseConversationResult.data as unknown as ConversationRow | null;
   }
   if (!conversation) {
     const { data: legacyMatch, error: legacyMatchError } = await supabase.from("matches").select("id").or(`and(user_low.eq.${userId},user_high.eq.${id}),and(user_low.eq.${id},user_high.eq.${userId})`).eq("state", "active").maybeSingle();
@@ -77,20 +96,20 @@ export default async function ChatPage({ params }: { params: Promise<{ id: strin
       return <ChatLoadError/>;
     }
     if (legacyMatch) {
-      const result = await supabase.from("conversations").select("id, match_id").eq("match_id", legacyMatch.id).maybeSingle();
+      const result = await supabase
+        .from("conversations")
+        .select("id, match_id, message_ttl_hours, matches!inner(user_low, user_high, state)")
+        .eq("match_id", legacyMatch.id)
+        .maybeSingle();
       if (result.error) {
         reportChatFailure("legacy_conversation_lookup", result.error);
         return <ChatLoadError/>;
       }
-      conversation = result.data as ConversationRow | null;
+      conversation = result.data as unknown as ConversationRow | null;
     }
   }
   if (!conversation) notFound();
-  const { data: match, error: matchError } = await supabase.from("matches").select("user_low, user_high, state").eq("id", conversation.match_id).maybeSingle();
-  if (matchError) {
-    reportChatFailure("match", matchError);
-    return <ChatLoadError/>;
-  }
+  const match = linkedMatch(conversation);
   if (!match || match.state !== "active") notFound();
   const otherUserId = match.user_low === userId ? match.user_high : match.user_high === userId ? match.user_low : null;
   if (!otherUserId) notFound();

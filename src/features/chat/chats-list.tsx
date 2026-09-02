@@ -29,7 +29,7 @@ function Avatar({ item, size = "large" }: { item: ChatListItem; size?: "small" |
       src={item.thumbnailUrl}
       quadrant={item.portrait}
       initials={item.firstName}
-      alt={item.portrait ? `Fictional portrait of ${item.firstName}` : `${item.firstName}'s profile placeholder`}
+      alt={item.portrait ? `Fictional portrait of ${item.firstName}` : `${item.firstName}'s profile photo`}
       className={size === "large" ? "size-14 shrink-0 rounded-full text-xl" : "size-15 rounded-full text-xl"}
     />
   );
